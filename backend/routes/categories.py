@@ -1,28 +1,97 @@
 from flask import Blueprint, request, jsonify
 from db import supabase
+from routes.audit_logs import log_audit_action
 
 category_routes = Blueprint('categories', __name__)
 
 
 @category_routes.route('/categories', methods=['GET'])
 def get_categories():
-    response = supabase.table("categories").select("*").execute()
+    response = supabase.table("categories") \
+        .select("*") \
+        .order("category_id") \
+        .execute()
+
     return jsonify(response.data)
+
 
 
 
 @category_routes.route('/add-category', methods=['POST'])
 def add_category():
-    data = request.json
+    data = request.get_json(silent=True) or {}
 
-    response = supabase.table("categories").insert({
-        "name": data["name"],
-        "description": data.get("description", ""),
-        "is_default": False,
-        "created_by": data.get("user_id")
-    }).execute()
+    name = data.get("name")
+    if not name:
+        return jsonify({"message": "name is required"}), 400
+
+    created_by = data.get("user_id")
+
+    try:
+        response = supabase.table("categories").insert({
+            "name": name,
+            "description": data.get("description", ""),
+            "is_default": data.get("is_default", False),
+            "created_by": created_by,
+        }).execute()
+
+        created = response.data[0] if response.data else {}
+        log_audit_action(created_by, "INSERT", "categories", created.get("category_id"))
+
+        return jsonify({
+            "message": "Category added",
+            "data": response.data
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@category_routes.route('/update-category/<category_id>', methods=['PUT'])
+def update_category(category_id):
+    data = request.get_json(silent=True) or {}
+
+    updates = {}
+    for key in ("name", "description", "is_default"):
+        if key in data:
+            updates[key] = data[key]
+
+    if not updates:
+        return jsonify({"message": "At least one updatable field is required"}), 400
+
+    try:
+        response = supabase.table("categories") \
+            .update(updates) \
+            .eq("category_id", category_id) \
+            .execute()
+
+        updated = response.data[0] if response.data else {}
+        audit_user_id = data.get("user_id", updated.get("created_by"))
+        log_audit_action(audit_user_id, "UPDATE", "categories", category_id)
+
+        return jsonify({
+            "message": "Category updated",
+            "data": response.data
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@category_routes.route('/delete-category/<category_id>', methods=['DELETE'])
+def delete_category(category_id):
+    data = request.get_json(silent=True) or {}
+
+    response = supabase.table("categories") \
+        .delete() \
+        .eq("category_id", category_id) \
+        .execute()
+
+    deleted = response.data[0] if response.data else {}
+    audit_user_id = data.get("user_id", deleted.get("created_by"))
+    log_audit_action(audit_user_id, "DELETE", "categories", category_id)
 
     return jsonify({
-        "message": "Category added",
+        "message": "Category deleted",
         "data": response.data
     })
