@@ -22,6 +22,10 @@ def _verify_password(stored_password, plain_password):
     return stored_password == plain_password
 
 
+def _is_valid_email(email):
+    return isinstance(email, str) and "@" in email and "." in email.strip().split("@")[-1]
+
+
 @auth_routes.route('/register', methods=['POST'])
 def register():
     data = request.get_json(silent=True) or {}
@@ -32,6 +36,19 @@ def register():
 
     if not username or not email or not password:
         return jsonify({"message": "username, email, and password are required"}), 400
+
+    username = username.strip() if isinstance(username, str) else username
+    email = email.strip().lower() if isinstance(email, str) else email
+    password = password.strip() if isinstance(password, str) else password
+
+    if not username or len(username) < 3:
+        return jsonify({"message": "username must be at least 3 characters"}), 400
+
+    if not _is_valid_email(email):
+        return jsonify({"message": "email is invalid"}), 400
+
+    if len(password) < 6:
+        return jsonify({"message": "password must be at least 6 characters"}), 400
 
     password_hash = generate_password_hash(password)
 
@@ -63,6 +80,15 @@ def login():
 
     if not email or not password:
         return jsonify({"message": "email and password are required"}), 400
+
+    email = email.strip().lower() if isinstance(email, str) else email
+    password = password.strip() if isinstance(password, str) else password
+
+    if not _is_valid_email(email):
+        return jsonify({"message": "email is invalid"}), 400
+
+    if len(password) < 6:
+        return jsonify({"message": "password must be at least 6 characters"}), 400
 
     try:
         response = supabase.table("users") \

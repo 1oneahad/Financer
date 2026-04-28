@@ -5,6 +5,10 @@ from routes.audit_logs import log_audit_action
 category_routes = Blueprint('categories', __name__)
 
 
+def _valid_id(value):
+    return int(value) > 0
+
+
 @category_routes.route('/categories', methods=['GET'])
 def get_categories():
     response = supabase.table("categories") \
@@ -25,7 +29,13 @@ def add_category():
     if not name:
         return jsonify({"message": "name is required"}), 400
 
+    name = name.strip() if isinstance(name, str) else name
+    if not name or len(name) < 2:
+        return jsonify({"message": "name must be at least 2 characters"}), 400
+
     created_by = data.get("user_id")
+    if created_by is not None and not _valid_id(created_by):
+        return jsonify({"message": "user_id must be a positive integer"}), 400
 
     try:
         response = supabase.table("categories").insert({
@@ -51,9 +61,18 @@ def add_category():
 def update_category(category_id):
     data = request.get_json(silent=True) or {}
 
+    if not _valid_id(category_id):
+        return jsonify({"message": "category_id must be a positive integer"}), 400
+
     updates = {}
     for key in ("name", "description", "is_default"):
         if key in data:
+            if key == "name" and isinstance(data.get("name"), str):
+                value = data.get("name").strip()
+                if not value or len(value) < 2:
+                    return jsonify({"message": "name must be at least 2 characters"}), 400
+                updates[key] = value
+                continue
             updates[key] = data[key]
 
     if not updates:
@@ -81,6 +100,9 @@ def update_category(category_id):
 @category_routes.route('/delete-category/<category_id>', methods=['DELETE'])
 def delete_category(category_id):
     data = request.get_json(silent=True) or {}
+
+    if not _valid_id(category_id):
+        return jsonify({"message": "category_id must be a positive integer"}), 400
 
     response = supabase.table("categories") \
         .delete() \

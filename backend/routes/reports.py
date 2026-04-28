@@ -12,6 +12,14 @@ def _to_float(value):
     return float(value)
 
 
+def _valid_id(value):
+    return int(value) > 0
+
+
+def _looks_like_date(value):
+    return isinstance(value, str) and len(value.strip()) == 10 and value.count("-") == 2
+
+
 @report_routes.route("/generate-report", methods=["POST"])
 def generate_report():
     data = request.get_json(silent=True) or {}
@@ -24,8 +32,17 @@ def generate_report():
     if not user_id or not report_type or not date_from or not date_to:
         return jsonify({"message": "user_id, report_type, date_from, and date_to are required"}), 400
 
+    if not _valid_id(user_id):
+        return jsonify({"message": "user_id must be a positive integer"}), 400
+
     if report_type not in VALID_REPORT_TYPES:
         return jsonify({"message": "Invalid report_type"}), 400
+
+    if not _looks_like_date(date_from) or not _looks_like_date(date_to):
+        return jsonify({"message": "date_from and date_to must look like YYYY-MM-DD"}), 400
+
+    if date_from > date_to:
+        return jsonify({"message": "date_from must be before or equal to date_to"}), 400
 
     try:
         expenses_response = supabase.table("expenses") \
@@ -95,6 +112,9 @@ def generate_report():
 
 @report_routes.route("/reports/<user_id>", methods=["GET"])
 def get_reports(user_id):
+    if not _valid_id(user_id):
+        return jsonify({"message": "user_id must be a positive integer"}), 400
+
     response = supabase.table("reports") \
         .select("*") \
         .eq("user_id", user_id) \
@@ -107,6 +127,9 @@ def get_reports(user_id):
 @report_routes.route("/delete-report/<report_id>", methods=["DELETE"])
 def delete_report(report_id):
     data = request.get_json(silent=True) or {}
+
+    if not _valid_id(report_id):
+        return jsonify({"message": "report_id must be a positive integer"}), 400
 
     response = supabase.table("reports") \
         .delete() \
