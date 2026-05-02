@@ -27,11 +27,20 @@ def _get_user_role(user_id):
 
 @category_routes.route('/categories', methods=['GET'])
 def get_categories():
-    response = supabase.table("categories") \
-        .select("*") \
-        .order("category_id") \
-        .execute()
+    # optional filter: show default categories plus those created by a specific user
+    user_id = request.args.get("user_id")
 
+    query = supabase.table("categories").select("*")
+
+    if user_id is not None:
+        try:
+            uid = int(user_id)
+            # return defaults (is_default = true) OR created_by = user
+            query = query.or_(f"is_default.eq.true,created_by.eq.{uid}")
+        except Exception:
+            return jsonify({"message": "user_id must be an integer"}), 400
+
+    response = query.order("category_id").execute()
     return jsonify(response.data)
 
 
@@ -56,14 +65,17 @@ def add_category():
     if not _valid_id(created_by):
         return jsonify({"message": "user_id must be a positive integer"}), 400
 
-    if _get_user_role(created_by) != "premium":
+    role = _get_user_role(created_by)
+    if role not in ("premium", "admin"):
         return jsonify({"message": "premium access required to add categories"}), 403
 
     try:
+        # admin-created categories are marked as default/global
+        is_default = True if role == "admin" else False
         response = supabase.table("categories").insert({
             "name": name,
             "description": data.get("description", ""),
-            "is_default": data.get("is_default", False),
+            "is_default": is_default,
             "created_by": created_by,
         }).execute()
 
