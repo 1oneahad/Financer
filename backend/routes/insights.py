@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from flask import Blueprint, jsonify
 
 from db import supabase
+from routes.budgets import normalize_budget_rows
 
 
 insight_routes = Blueprint("insights", __name__)
@@ -124,7 +125,7 @@ def budget_vs_actual(user_id):
 
     categories = _load_categories()
     budgets = supabase.table("budgets") \
-        .select("budget_id, category_id, amount_limit, period, start_date") \
+        .select("budget_id, category_id, amount_limit, start_date, end_date") \
         .eq("user_id", user_id) \
         .order("start_date", desc=True) \
         .execute()
@@ -137,18 +138,10 @@ def budget_vs_actual(user_id):
     expense_rows = expenses.data or []
     rows = []
 
-    for budget in budgets.data or []:
+    for budget in normalize_budget_rows(budgets.data):
         start_date = _parse_date(budget["start_date"])
-        if budget["period"] == "monthly":
-            budget_start = start_date.replace(day=1)
-            if budget_start.month == 12:
-                next_month = date(budget_start.year + 1, 1, 1)
-            else:
-                next_month = date(budget_start.year, budget_start.month + 1, 1)
-            budget_end = next_month - timedelta(days=1)
-        else:
-            budget_start = start_date
-            budget_end = start_date + timedelta(days=6)
+        budget_start = start_date
+        budget_end = _parse_date(budget["end_date"])
 
         spent = 0.0
         for expense in expense_rows:

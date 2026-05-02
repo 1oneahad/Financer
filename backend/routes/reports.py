@@ -2,11 +2,13 @@ from collections import defaultdict
 from flask import Blueprint, request, jsonify
 from db import supabase
 from routes.audit_logs import log_audit_action
+from routes.budgets import normalize_budget_rows
 from datetime import date
 
 
 report_routes = Blueprint("reports", __name__)
 VALID_REPORT_TYPES = {"monthly_summary", "by_category", "date_range"}
+BASIC_REPORT_MONTHLY_LIMIT = 3
 
 
 def _to_float(value):
@@ -25,6 +27,43 @@ def _valid_id(value):
 
 def _looks_like_date(value):
     return isinstance(value, str) and len(value.strip()) == 10 and value.count("-") == 2
+
+
+def _current_month_bounds():
+    today = date.today()
+    month_start = today.replace(day=1)
+
+    if month_start.month == 12:
+        next_month_start = month_start.replace(year=month_start.year + 1, month=1)
+    else:
+        next_month_start = month_start.replace(month=month_start.month + 1)
+
+    return month_start.isoformat(), next_month_start.isoformat()
+
+
+def _get_user_role(user_id):
+    response = supabase.table("users") \
+        .select("user_id, role") \
+        .eq("user_id", user_id) \
+        .limit(1) \
+        .execute()
+
+    if not response.data:
+        return None
+
+    return response.data[0].get("role")
+
+
+def _count_reports_generated_this_month(user_id):
+    month_start, next_month_start = _current_month_bounds()
+    response = supabase.table("reports") \
+        .select("report_id") \
+        .eq("user_id", user_id) \
+        .gte("generated_at", month_start) \
+        .lt("generated_at", next_month_start) \
+        .execute()
+
+    return len(response.data or [])
 
 
 @report_routes.route("/generate-report", methods=["POST"])
@@ -51,25 +90,21 @@ def generate_report():
     if date_from > date_to:
         return jsonify({"message": "date_from must be before or equal to date_to"}), 400
 
-    # enforce free-tier report limit: basic users can generate up to 3 reports per calendar month
     try:
-        user_resp = supabase.table("users").select("user_id, role").eq("user_id", user_id).limit(1).execute()
-        user_role = (user_resp.data[0].get("role") if user_resp.data else "basic")
-    except Exception:
-        user_role = "basic"
+        user_role = _get_user_role(user_id)
+        if user_role is None:
+            return jsonify({"message": "user_id not found"}), 404
 
-    if user_role != "premium" and user_role != "admin":
-        # count reports generated this month
-        today = date.today()
-        month_start = today.replace(day=1).isoformat()
-        # last day of month: simple way to count reports where generated_at >= month_start
-        reports_count_resp = supabase.table("reports").select("report_id") \
-            .eq("user_id", user_id) \
-            .gte("generated_at", month_start) \
-            .execute()
-        reports_count = len(reports_count_resp.data or [])
-        if reports_count >= 3:
-            return jsonify({"message": "Basic accounts are limited to 3 reports per month"}), 403
+        if user_role == "basic":
+            reports_count = _count_reports_generated_this_month(user_id)
+            if reports_count >= BASIC_REPORT_MONTHLY_LIMIT:
+                return jsonify({
+                    "message": "Basic accounts are limited to 3 reports per month",
+                    "limit": BASIC_REPORT_MONTHLY_LIMIT,
+                    "used": reports_count,
+                }), 403
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
     try:
         # load expenses for the requested date range (used by several views)
@@ -99,36 +134,23 @@ def generate_report():
 
         # budgets: approximate budget vs actual for budgets belonging to the user
         budgets_resp = supabase.table("budgets") \
-            .select("budget_id, category_id, amount_limit, period, start_date") \
+            .select("budget_id, category_id, amount_limit, start_date, end_date") \
             .eq("user_id", user_id) \
             .order("start_date", desc=True) \
             .execute()
 
         budget_rows = []
-        for budget in budgets_resp.data or []:
+        for budget in normalize_budget_rows(budgets_resp.data):
             # determine budget window
             try:
-                from datetime import date as _d, timedelta as _td
-                b_start = _d.fromisoformat(str(budget["start_date"]))
+                b_start = date.fromisoformat(str(budget["start_date"]))
+                b_window_end = date.fromisoformat(str(budget["end_date"]))
             except Exception:
                 b_start = None
-
-            if budget.get("period") == "monthly" and b_start:
-                b_window_start = b_start.replace(day=1)
-                if b_window_start.month == 12:
-                    next_month = _d(b_window_start.year + 1, 1, 1)
-                else:
-                    next_month = _d(b_window_start.year, b_window_start.month + 1, 1)
-                b_window_end = next_month - _td(days=1)
-            elif b_start:
-                b_window_start = b_start
-                b_window_end = b_start + _td(days=6)
-            else:
-                b_window_start = None
                 b_window_end = None
 
             spent = 0.0
-            if b_window_start and b_window_end:
+            if b_start and b_window_end:
                 for e in expenses:
                     try:
                         from datetime import date as _d2
@@ -137,7 +159,7 @@ def generate_report():
                         continue
                     if int(e.get("category_id")) != int(budget.get("category_id")):
                         continue
-                    if b_window_start <= ed <= b_window_end:
+                    if b_start <= ed <= b_window_end:
                         spent += float(e.get("amount") or 0)
 
             amount_limit = float(budget.get("amount_limit") or 0)

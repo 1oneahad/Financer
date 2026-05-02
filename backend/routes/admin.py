@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from db import supabase
 from routes.audit_logs import log_audit_action
+from routes.budgets import _end_date_for_period, _period_from_dates, normalize_budget_rows
 
 
 admin_routes = Blueprint("admin", __name__)
@@ -212,7 +213,7 @@ def admin_list_budgets():
         return jsonify(error[0]), error[1]
 
     resp = supabase.table('budgets').select('*').order('start_date', desc=True).execute()
-    return jsonify(resp.data)
+    return jsonify(normalize_budget_rows(resp.data))
 
 
 @admin_routes.route('/admin/budgets/<budget_id>', methods=['DELETE'])
@@ -245,18 +246,36 @@ def admin_update_budget(budget_id):
     if not _valid_id(budget_id):
         return jsonify({'message': 'budget_id must be a positive integer'}), 400
 
+    existing = None
+    if 'period' in data or 'start_date' in data:
+        existing = supabase.table('budgets').select('*').eq('budget_id', budget_id).limit(1).execute()
+        if not existing.data:
+            return jsonify({'message': 'budget not found'}), 404
+
     updates = {}
-    for key in ('user_id', 'category_id', 'amount_limit', 'period', 'start_date'):
+    period = data.get('period')
+    for key in ('user_id', 'category_id', 'amount_limit', 'start_date'):
         if key in data:
             if key in {'user_id', 'category_id'} and not _valid_id(data.get(key)):
                 return jsonify({'message': f'{key} must be a positive integer'}), 400
             if key == 'amount_limit' and not _valid_amount(data.get('amount_limit')):
                 return jsonify({'message': 'amount_limit must be greater than 0'}), 400
-            if key == 'period' and data.get('period') not in {'weekly', 'monthly'}:
-                return jsonify({'message': 'period must be weekly or monthly'}), 400
             if key == 'start_date' and not _looks_like_date(data.get('start_date')):
                 return jsonify({'message': 'start_date must look like YYYY-MM-DD'}), 400
             updates[key] = data[key]
+
+    if period is not None and period not in {'weekly', 'monthly'}:
+        return jsonify({'message': 'period must be weekly or monthly'}), 400
+
+    if period is not None or 'start_date' in updates:
+        current_row = existing.data[0]
+        next_start_date = updates.get('start_date', current_row.get('start_date'))
+        next_period = period or _period_from_dates(current_row.get('start_date'), current_row.get('end_date'))
+
+        if next_period not in {'weekly', 'monthly'}:
+            return jsonify({'message': 'period must be provided when updating a custom budget window'}), 400
+
+        updates['end_date'] = _end_date_for_period(next_start_date, next_period)
 
     if not updates:
         return jsonify({'message': 'At least one field required to update'}), 400
@@ -269,7 +288,7 @@ def admin_update_budget(budget_id):
 
     resp = supabase.table('budgets').update(updates).eq('budget_id', budget_id).execute()
     log_audit_action(admin_user_id, 'UPDATE', 'budgets', budget_id)
-    return jsonify({'message': 'Budget updated', 'data': resp.data})
+    return jsonify({'message': 'Budget updated', 'data': normalize_budget_rows(resp.data)})
 
 
 @admin_routes.route('/admin/reports', methods=['GET'])

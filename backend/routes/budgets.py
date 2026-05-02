@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from flask import Blueprint, request, jsonify
 from db import supabase
 from routes.audit_logs import log_audit_action
@@ -22,6 +24,51 @@ def _valid_amount(value):
 
 def _looks_like_date(value):
     return isinstance(value, str) and len(value.strip()) == 10 and value.count("-") == 2
+
+
+def _parse_date(value):
+    return date.fromisoformat(str(value))
+
+
+def _end_date_for_period(start_date, period):
+    parsed_start = _parse_date(start_date)
+
+    if period == "weekly":
+        return (parsed_start + timedelta(days=6)).isoformat()
+
+    if parsed_start.month == 12:
+        next_month = date(parsed_start.year + 1, 1, 1)
+    else:
+        next_month = date(parsed_start.year, parsed_start.month + 1, 1)
+
+    return (next_month - timedelta(days=1)).isoformat()
+
+
+def _period_from_dates(start_date, end_date):
+    try:
+        parsed_start = _parse_date(start_date)
+        parsed_end = _parse_date(end_date)
+    except (TypeError, ValueError):
+        return None
+
+    if parsed_end == parsed_start + timedelta(days=6):
+        return "weekly"
+
+    if parsed_end == _parse_date(_end_date_for_period(start_date, "monthly")):
+        return "monthly"
+
+    return "custom"
+
+
+def normalize_budget_row(row):
+    normalized = dict(row)
+    if not normalized.get("period"):
+        normalized["period"] = _period_from_dates(normalized.get("start_date"), normalized.get("end_date"))
+    return normalized
+
+
+def normalize_budget_rows(rows):
+    return [normalize_budget_row(row) for row in rows or []]
 
 
 @budget_routes.route("/add-budget", methods=["POST"])
@@ -53,20 +100,21 @@ def add_budget():
         return jsonify({"message": "start_date must look like YYYY-MM-DD"}), 400
 
     try:
+        end_date = _end_date_for_period(start_date, period)
         response = supabase.table("budgets").insert({
             "user_id": int(user_id),
             "category_id": int(category_id),
             "amount_limit": float(amount_limit),
-            "period": period,
             "start_date": start_date,
+            "end_date": end_date,
         }).execute()
 
-        created_budget = response.data[0] if response.data else {}
+        created_budget = normalize_budget_row(response.data[0]) if response.data else {}
         log_audit_action(int(user_id), "INSERT", "budgets", created_budget.get("budget_id"))
 
         return jsonify({
             "message": "Budget added",
-            "data": response.data,
+            "data": normalize_budget_rows(response.data),
         })
 
     except Exception as e:
@@ -84,7 +132,7 @@ def get_budgets(user_id):
         .order("start_date", desc=True) \
         .execute()
 
-    return jsonify(response.data)
+    return jsonify(normalize_budget_rows(response.data))
 
 
 
@@ -95,18 +143,41 @@ def update_budget(budget_id):
     if not _valid_id(budget_id):
         return jsonify({"message": "budget_id must be a positive integer"}), 400
 
+    existing = None
+    if "period" in data or "start_date" in data:
+        existing = supabase.table("budgets") \
+            .select("*") \
+            .eq("budget_id", budget_id) \
+            .limit(1) \
+            .execute()
+
+        if not existing.data:
+            return jsonify({"message": "Budget not found"}), 404
+
     updates = {}
-    for key in ("category_id", "amount_limit", "period", "start_date"):
+    period = data.get("period")
+    for key in ("category_id", "amount_limit", "start_date"):
         if key in data:
             if key == "category_id" and not _valid_id(data.get("category_id")):
                 return jsonify({"message": "category_id must be a positive integer"}), 400
             if key == "amount_limit" and not _valid_amount(data.get("amount_limit")):
                 return jsonify({"message": "amount_limit must be greater than 0"}), 400
-            if key == "period" and data.get("period") not in {"weekly", "monthly"}:
-                return jsonify({"message": "period must be weekly or monthly"}), 400
             if key == "start_date" and not _looks_like_date(data.get("start_date")):
                 return jsonify({"message": "start_date must look like YYYY-MM-DD"}), 400
             updates[key] = data[key]
+
+    if period is not None and period not in {"weekly", "monthly"}:
+        return jsonify({"message": "period must be weekly or monthly"}), 400
+
+    if period is not None or "start_date" in updates:
+        current_row = existing.data[0]
+        next_start_date = updates.get("start_date", current_row.get("start_date"))
+        next_period = period or _period_from_dates(current_row.get("start_date"), current_row.get("end_date"))
+
+        if next_period not in {"weekly", "monthly"}:
+            return jsonify({"message": "period must be provided when updating a custom budget window"}), 400
+
+        updates["end_date"] = _end_date_for_period(next_start_date, next_period)
 
     if not updates:
         return jsonify({"message": "At least one updatable field is required"}), 400
@@ -121,13 +192,13 @@ def update_budget(budget_id):
         .eq("budget_id", budget_id) \
         .execute()
 
-    updated_budget = response.data[0] if response.data else {}
+    updated_budget = normalize_budget_row(response.data[0]) if response.data else {}
     audit_user_id = data.get("user_id", updated_budget.get("user_id"))
     log_audit_action(audit_user_id, "UPDATE", "budgets", budget_id)
 
     return jsonify({
         "message": "Budget updated",
-        "data": response.data,
+        "data": normalize_budget_rows(response.data),
     })
 
 
