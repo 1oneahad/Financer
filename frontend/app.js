@@ -402,7 +402,8 @@ function reportTypeLabel(type) {
   const labels = {
     monthly_summary: "Monthly summary",
     by_category: "Category breakdown",
-    date_range: "Date range report",
+    date_range: "Detailed date range",
+    "30_days": "Last 30 days",
   };
   return labels[type] || type || "Report";
 }

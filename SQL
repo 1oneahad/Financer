@@ -42,7 +42,7 @@ CREATE TABLE budgets (
 CREATE TABLE reports (
     report_id    BIGSERIAL PRIMARY KEY,
     user_id      BIGINT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
-    report_type  TEXT NOT NULL CHECK (report_type IN ('monthly_summary', '30_days', 'date_range')),
+    report_type  TEXT NOT NULL CHECK (report_type IN ('monthly_summary', 'by_category', 'date_range')),
     date_from    DATE NOT NULL,
     date_to      DATE NOT NULL,
     generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
