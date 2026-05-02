@@ -252,7 +252,7 @@ async function request(path, options = {}) {
 
 function renderPieChart(items) {
   if (!items.length) {
-    pieChartEl.style.background = "radial-gradient(circle at center, rgba(255,255,255,0.93) 0 34%, rgba(255,255,255,0.08) 35% 100%)";
+    pieChartEl.style.backgroundImage = "radial-gradient(circle at center, rgba(255,255,255,0.93) 0 34%, rgba(255,255,255,0.08) 35% 100%)";
     pieLegendEl.innerHTML = '<li class="legend-empty">No category data loaded yet.</li>';
     chartTotalEl.textContent = "0.00";
     topCategoryEl.textContent = "-";
@@ -265,13 +265,13 @@ function renderPieChart(items) {
   const slices = [];
 
   items.forEach((item, index) => {
-    const percent = total ? (Number(item.total_spent || 0) / total) * 100 : 0;
-    const end = start + percent;
-    slices.push(`${colors[index % colors.length]} ${start}% ${end}%`);
+    const degrees = total ? (Number(item.total_spent || 0) / total) * 360 : 0;
+    const end = index === items.length - 1 ? 360 : start + degrees;
+    slices.push(`${colors[index % colors.length]} ${start.toFixed(3)}deg ${end.toFixed(3)}deg`);
     start = end;
   });
 
-  pieChartEl.style.background = `conic-gradient(${slices.join(", ")})`;
+  pieChartEl.style.backgroundImage = `conic-gradient(${slices.join(", ")})`;
   chartTotalEl.textContent = money(total);
   topCategoryEl.textContent = items[0]?.category_name || "-";
   topCategoryValueEl.textContent = `${money(items[0]?.total_spent || 0)} spent this month`;
@@ -595,24 +595,48 @@ async function loadDashboard() {
     return;
   }
 
-  try {
-    const [spentByCategory, monthlyTotal, budgetVsActual, recentTransactions] = await Promise.all([
-      request(`/insights/spent-by-category/${state.session.user_id}`),
-      request(`/insights/total-monthly/${state.session.user_id}`),
-      request(`/insights/budget-vs-actual/${state.session.user_id}`),
-      request(`/insights/recent-transactions/${state.session.user_id}`),
-    ]);
+  const failures = [];
+  const loadPart = async (label, callback) => {
+    try {
+      await callback();
+    } catch (error) {
+      failures.push(`${label}: ${error.message}`);
+    }
+  };
 
+  await loadPart("Monthly total", async () => {
+    const monthlyTotal = await request(`/insights/total-monthly/${state.session.user_id}`);
     monthlyTotalEl.textContent = money(monthlyTotal.spent_monthly);
     monthlyCountEl.textContent = `${monthlyTotal.expense_count} transaction${monthlyTotal.expense_count === 1 ? "" : "s"} this month`;
     transactionCountEl.textContent = String(monthlyTotal.expense_count || 0);
+  });
+
+  await loadPart("Spent by category", async () => {
+    const spentByCategory = await request(`/insights/spent-by-category/${state.session.user_id}`);
     renderPieChart(spentByCategory.items || []);
+  });
+
+  await loadPart("Budget vs actual", async () => {
+    const budgetVsActual = await request(`/insights/budget-vs-actual/${state.session.user_id}`);
     renderBudgetRows(budgetVsActual.items || []);
+  });
+
+  await loadPart("Recent transactions", async () => {
+    const recentTransactions = await request(`/insights/recent-transactions/${state.session.user_id}`);
     renderRecentRows(recentTransactions.items || []);
+  });
+
+  try {
     await loadCategoriesList();
     await loadExpensesList();
     await loadBudgetRecords();
     await loadReportRecords();
+
+    if (failures.length) {
+      setAuthMessage(`Dashboard partially loaded. ${failures.join(" | ")}`, true);
+      return;
+    }
+
     setAuthMessage(`Dashboard loaded for ${state.session.username || state.session.email}.`);
   } catch (error) {
     setAuthMessage(error.message, true);

@@ -1,6 +1,8 @@
 from collections import defaultdict
 from datetime import date, timedelta
+from time import sleep
 
+import httpx
 from flask import Blueprint, jsonify
 
 from db import supabase
@@ -8,6 +10,15 @@ from routes.budgets import normalize_budget_rows
 
 
 insight_routes = Blueprint("insights", __name__)
+
+_CATEGORY_CACHE = {}
+_TRANSIENT_SUPABASE_ERRORS = (
+    httpx.ReadError,
+    httpx.ConnectError,
+    httpx.TimeoutException,
+    httpx.RemoteProtocolError,
+    httpx.NetworkError,
+)
 
 
 def _valid_id(value):
@@ -31,17 +42,42 @@ def _month_range(for_date=None):
     return start, next_month - timedelta(days=1)
 
 
+def _execute_with_retry(query, attempts=3):
+    last_error = None
+
+    for attempt in range(attempts):
+        try:
+            return query.execute()
+        except _TRANSIENT_SUPABASE_ERRORS as error:
+            last_error = error
+            if attempt == attempts - 1:
+                break
+            sleep(0.2 * (attempt + 1))
+
+    raise last_error
+
+
 def _get_user(user_id):
-    return supabase.table("users") \
-        .select("user_id, username, email, role") \
-        .eq("user_id", user_id) \
-        .limit(1) \
-        .execute()
+    return _execute_with_retry(
+        supabase.table("users")
+        .select("user_id, username, email, role")
+        .eq("user_id", user_id)
+        .limit(1)
+    )
 
 
 def _load_categories():
-    response = supabase.table("categories").select("category_id, name").execute()
-    return {row["category_id"]: row["name"] for row in (response.data or [])}
+    try:
+        response = _execute_with_retry(supabase.table("categories").select("category_id, name"))
+    except _TRANSIENT_SUPABASE_ERRORS:
+        if _CATEGORY_CACHE:
+            return _CATEGORY_CACHE.copy()
+        raise
+
+    categories = {row["category_id"]: row["name"] for row in (response.data or [])}
+    _CATEGORY_CACHE.clear()
+    _CATEGORY_CACHE.update(categories)
+    return categories
 
 
 @insight_routes.route("/insights/spent-by-category/<user_id>", methods=["GET"])
@@ -56,12 +92,12 @@ def spent_by_category(user_id):
     month_start, month_end = _month_range()
     categories = _load_categories()
 
-    expenses = supabase.table("expenses") \
-        .select("category_id, amount, expense_date") \
-        .eq("user_id", user_id) \
-        .gte("expense_date", month_start.isoformat()) \
-        .lte("expense_date", month_end.isoformat()) \
-        .execute()
+    expenses = _execute_with_retry(supabase.table("expenses")
+        .select("category_id, amount, expense_date")
+        .eq("user_id", user_id)
+        .gte("expense_date", month_start.isoformat())
+        .lte("expense_date", month_end.isoformat())
+    )
 
     totals = defaultdict(float)
     for item in expenses.data or []:
@@ -96,12 +132,12 @@ def total_monthly(user_id):
         return jsonify({"message": "user not found"}), 404
 
     month_start, month_end = _month_range()
-    expenses = supabase.table("expenses") \
-        .select("amount") \
-        .eq("user_id", user_id) \
-        .gte("expense_date", month_start.isoformat()) \
-        .lte("expense_date", month_end.isoformat()) \
-        .execute()
+    expenses = _execute_with_retry(supabase.table("expenses")
+        .select("amount")
+        .eq("user_id", user_id)
+        .gte("expense_date", month_start.isoformat())
+        .lte("expense_date", month_end.isoformat())
+    )
 
     total = round(sum(float(row.get("amount") or 0) for row in (expenses.data or [])), 2)
 
@@ -124,16 +160,16 @@ def budget_vs_actual(user_id):
         return jsonify({"message": "user not found"}), 404
 
     categories = _load_categories()
-    budgets = supabase.table("budgets") \
-        .select("budget_id, category_id, amount_limit, start_date, end_date") \
-        .eq("user_id", user_id) \
-        .order("start_date", desc=True) \
-        .execute()
+    budgets = _execute_with_retry(supabase.table("budgets")
+        .select("budget_id, category_id, amount_limit, start_date, end_date")
+        .eq("user_id", user_id)
+        .order("start_date", desc=True)
+    )
 
-    expenses = supabase.table("expenses") \
-        .select("category_id, amount, expense_date") \
-        .eq("user_id", user_id) \
-        .execute()
+    expenses = _execute_with_retry(supabase.table("expenses")
+        .select("category_id, amount, expense_date")
+        .eq("user_id", user_id)
+    )
 
     expense_rows = expenses.data or []
     rows = []
@@ -183,12 +219,12 @@ def recent_transactions(user_id):
         return jsonify({"message": "user not found"}), 404
 
     categories = _load_categories()
-    expenses = supabase.table("expenses") \
-        .select("expense_id, category_id, amount, expense_date, notes, created_at") \
-        .eq("user_id", user_id) \
-        .order("expense_date", desc=True) \
-        .limit(10) \
-        .execute()
+    expenses = _execute_with_retry(supabase.table("expenses")
+        .select("expense_id, category_id, amount, expense_date, notes, created_at")
+        .eq("user_id", user_id)
+        .order("expense_date", desc=True)
+        .limit(10)
+    )
 
     items = []
     for expense in expenses.data or []:
