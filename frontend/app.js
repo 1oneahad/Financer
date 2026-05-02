@@ -433,6 +433,74 @@ function renderReportMiniList(items, emptyText, itemBuilder) {
   `;
 }
 
+function renderReportSummaryGrid(items) {
+  return `
+    <div class="report-summary-grid">
+      ${items.map((item) => `
+        <span>
+          <strong>${escapeHtml(item.value)}</strong>
+          <small>${escapeHtml(item.label)}</small>
+        </span>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderReportNote(text) {
+  return `<span class="muted-cell">${escapeHtml(text)}</span>`;
+}
+
+function renderReportBreakdown(item, summary, categories, budgets) {
+  if (item.report_type === "by_category") {
+    return renderReportMiniList(categories, "No category spending in this range.", (category) => `
+      <li>
+        <span>${escapeHtml(category.category_name || `Category ${category.category_id}`)}</span>
+        <strong>${money(category.total_amount)}</strong>
+      </li>
+    `);
+  }
+
+  if (item.report_type === "monthly_summary") {
+    const topCategory = summary.top_category;
+    if (!topCategory) {
+      return renderReportNote("No spending recorded for this summary.");
+    }
+
+    return `
+      <div class="report-highlight">
+        <small>Top category</small>
+        <strong>${escapeHtml(topCategory.category_name || `Category ${topCategory.category_id}`)}</strong>
+        <span>${money(topCategory.total_amount)}</span>
+      </div>
+    `;
+  }
+
+  const budgetRows = budgets.slice(0, 3);
+  return renderReportMiniList(budgetRows, "No budgets matched this range.", (budget) => `
+    <li>
+      <span>${escapeHtml(budget.category_name || `Category ${budget.category_id}`)} ${budget.over_budget ? "(over)" : "(ok)"}</span>
+      <strong>${money(budget.remaining)}</strong>
+    </li>
+  `);
+}
+
+function renderReportDetails(item, recent) {
+  if (item.report_type === "date_range") {
+    return renderReportMiniList(recent.slice(0, 5), "No transactions in this range.", (expense) => `
+      <li>
+        <span>${escapeHtml(expense.expense_date)} - ${escapeHtml(expense.category_name || `Category ${expense.category_id}`)}</span>
+        <strong>${money(expense.amount)}</strong>
+      </li>
+    `);
+  }
+
+  if (item.report_type === "by_category") {
+    return renderReportNote("Focused on category totals. Use Detailed date range when you need transaction-level lines.");
+  }
+
+  return renderReportNote("High-level summary for the selected period.");
+}
+
 function renderReportRecords(items) {
   renderWorkspaceTable(
     reportsBody,
@@ -445,37 +513,36 @@ function renderReportRecords(items) {
       const recent = item.views?.recent_transactions || [];
       const budgets = item.views?.budget_vs_actual?.items || [];
       const overBudgetCount = budgets.filter((budget) => budget.over_budget).length;
+      const topCategory = summary.top_category;
+      const summaryItems = item.report_type === "by_category"
+        ? [
+            { value: money(summary.total_amount || 0), label: "Total spent" },
+            { value: String(categories.length), label: "Categories" },
+            { value: String(summary.expense_count || 0), label: "Transactions" },
+            { value: topCategory ? money(topCategory.total_amount) : "0.00", label: "Top category" },
+          ]
+        : [
+            { value: money(summary.total_amount || 0), label: "Total spent" },
+            { value: String(summary.expense_count || 0), label: "Transactions" },
+            { value: money(summary.average_expense || 0), label: "Average" },
+            { value: String(overBudgetCount), label: "Over budget" },
+          ];
 
       return `
         <tr>
           <td>
             <strong>${escapeHtml(reportTypeLabel(item.report_type))}</strong>
-            <span class="report-meta">#${escapeHtml(item.report_id)} • ${escapeHtml(item.date_from)} to ${escapeHtml(item.date_to)}</span>
+            <span class="report-meta">#${escapeHtml(item.report_id)} - ${escapeHtml(item.date_from)} to ${escapeHtml(item.date_to)}</span>
             <span class="report-meta">Created ${escapeHtml(formatDateTime(item.generated_at))}</span>
           </td>
           <td>
-            <div class="report-summary-grid">
-              <span><strong>${money(summary.total_amount || 0)}</strong><small>Total spent</small></span>
-              <span><strong>${escapeHtml(summary.expense_count || 0)}</strong><small>Transactions</small></span>
-              <span><strong>${money(summary.average_expense || 0)}</strong><small>Average</small></span>
-              <span><strong>${overBudgetCount}</strong><small>Over budget</small></span>
-            </div>
+            ${renderReportSummaryGrid(summaryItems)}
           </td>
           <td>
-            ${renderReportMiniList(categories.slice(0, 3), "No category spending in this range.", (category) => `
-              <li>
-                <span>${escapeHtml(category.category_name || `Category ${category.category_id}`)}</span>
-                <strong>${money(category.total_amount)}</strong>
-              </li>
-            `)}
+            ${renderReportBreakdown(item, summary, categories.slice(0, 5), budgets)}
           </td>
           <td>
-            ${renderReportMiniList(recent.slice(0, 3), "No transactions in this range.", (expense) => `
-              <li>
-                <span>${escapeHtml(expense.expense_date)} • ${escapeHtml(expense.category_name || `Category ${expense.category_id}`)}</span>
-                <strong>${money(expense.amount)}</strong>
-              </li>
-            `)}
+            ${renderReportDetails(item, recent)}
           </td>
         </tr>
       `;

@@ -728,6 +728,24 @@ th {
   line-height: 1.35;
 }
 
+.report-highlight {
+  display: grid;
+  gap: 4px;
+  min-width: 190px;
+}
+
+.report-highlight small {
+  color: var(--muted);
+}
+
+.report-highlight strong {
+  font-size: 0.98rem;
+}
+
+.report-highlight span {
+  color: var(--muted-strong);
+}
+
 .admin-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
