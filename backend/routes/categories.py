@@ -6,7 +6,23 @@ category_routes = Blueprint('categories', __name__)
 
 
 def _valid_id(value):
-    return int(value) > 0
+    try:
+        return int(value) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _get_user_role(user_id):
+    response = supabase.table("users") \
+        .select("user_id, role") \
+        .eq("user_id", user_id) \
+        .limit(1) \
+        .execute()
+
+    if not response.data:
+        return None
+
+    return response.data[0].get("role")
 
 
 @category_routes.route('/categories', methods=['GET'])
@@ -34,8 +50,14 @@ def add_category():
         return jsonify({"message": "name must be at least 2 characters"}), 400
 
     created_by = data.get("user_id")
-    if created_by is not None and not _valid_id(created_by):
+    if created_by is None:
+        return jsonify({"message": "user_id is required to add a category"}), 400
+
+    if not _valid_id(created_by):
         return jsonify({"message": "user_id must be a positive integer"}), 400
+
+    if _get_user_role(created_by) != "premium":
+        return jsonify({"message": "premium access required to add categories"}), 403
 
     try:
         response = supabase.table("categories").insert({
