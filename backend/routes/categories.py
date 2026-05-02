@@ -74,13 +74,13 @@ def add_category():
         is_default = True if role == "admin" else False
         response = supabase.table("categories").insert({
             "name": name,
-            "description": data.get("description", ""),
+            "description": data.get("description") or "",
             "is_default": is_default,
             "created_by": created_by,
         }).execute()
 
         created = response.data[0] if response.data else {}
-        log_audit_action(created_by, "INSERT", "categories", created.get("category_id"))
+        log_audit_action(int(created_by), "INSERT", "categories", created.get("category_id"))
 
         return jsonify({
             "message": "Category added",
@@ -112,23 +112,19 @@ def update_category(category_id):
     if not updates:
         return jsonify({"message": "At least one updatable field is required"}), 400
 
-    try:
-        response = supabase.table("categories") \
-            .update(updates) \
-            .eq("category_id", category_id) \
-            .execute()
+    response = supabase.table("categories") \
+        .update(updates) \
+        .eq("category_id", category_id) \
+        .execute()
 
-        updated = response.data[0] if response.data else {}
-        audit_user_id = data.get("user_id", updated.get("created_by"))
-        log_audit_action(audit_user_id, "UPDATE", "categories", category_id)
+    updated = response.data[0] if response.data else {}
+    audit_user_id = data.get("user_id", updated.get("created_by"))
+    log_audit_action(audit_user_id, "UPDATE", "categories", category_id)
 
-        return jsonify({
-            "message": "Category updated",
-            "data": response.data
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({
+        "message": "Category updated",
+        "data": response.data
+    })
 
 
 @category_routes.route('/delete-category/<category_id>', methods=['DELETE'])
@@ -138,12 +134,21 @@ def delete_category(category_id):
     if not _valid_id(category_id):
         return jsonify({"message": "category_id must be a positive integer"}), 400
 
+    existing = supabase.table("categories") \
+        .select("*") \
+        .eq("category_id", category_id) \
+        .limit(1) \
+        .execute()
+
+    if not existing.data:
+        return jsonify({"message": "Category not found"}), 404
+
     response = supabase.table("categories") \
         .delete() \
         .eq("category_id", category_id) \
         .execute()
 
-    deleted = response.data[0] if response.data else {}
+    deleted = existing.data[0]
     audit_user_id = data.get("user_id", deleted.get("created_by"))
     log_audit_action(audit_user_id, "DELETE", "categories", category_id)
 

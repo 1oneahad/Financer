@@ -7,11 +7,17 @@ budget_routes = Blueprint("budgets", __name__)
 
 
 def _valid_id(value):
-    return int(value) > 0
+    try:
+        return int(value) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def _valid_amount(value):
-    return float(value) > 0
+    try:
+        return float(value) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def _looks_like_date(value):
@@ -48,15 +54,15 @@ def add_budget():
 
     try:
         response = supabase.table("budgets").insert({
-            "user_id": user_id,
-            "category_id": category_id,
-            "amount_limit": amount_limit,
+            "user_id": int(user_id),
+            "category_id": int(category_id),
+            "amount_limit": float(amount_limit),
             "period": period,
             "start_date": start_date,
         }).execute()
 
         created_budget = response.data[0] if response.data else {}
-        log_audit_action(user_id, "INSERT", "budgets", created_budget.get("budget_id"))
+        log_audit_action(int(user_id), "INSERT", "budgets", created_budget.get("budget_id"))
 
         return jsonify({
             "message": "Budget added",
@@ -105,26 +111,24 @@ def update_budget(budget_id):
     if not updates:
         return jsonify({"message": "At least one updatable field is required"}), 400
 
-    if "period" in updates and updates["period"] not in {"weekly", "monthly"}:
-        return jsonify({"message": "period must be weekly or monthly"}), 400
+    if "category_id" in updates:
+        updates["category_id"] = int(updates["category_id"])
+    if "amount_limit" in updates:
+        updates["amount_limit"] = float(updates["amount_limit"])
 
-    try:
-        response = supabase.table("budgets") \
-            .update(updates) \
-            .eq("budget_id", budget_id) \
-            .execute()
+    response = supabase.table("budgets") \
+        .update(updates) \
+        .eq("budget_id", budget_id) \
+        .execute()
 
-        updated_budget = response.data[0] if response.data else {}
-        audit_user_id = data.get("user_id", updated_budget.get("user_id"))
-        log_audit_action(audit_user_id, "UPDATE", "budgets", budget_id)
+    updated_budget = response.data[0] if response.data else {}
+    audit_user_id = data.get("user_id", updated_budget.get("user_id"))
+    log_audit_action(audit_user_id, "UPDATE", "budgets", budget_id)
 
-        return jsonify({
-            "message": "Budget updated",
-            "data": response.data,
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({
+        "message": "Budget updated",
+        "data": response.data,
+    })
 
 
 @budget_routes.route("/delete-budget/<budget_id>", methods=["DELETE"])
@@ -134,12 +138,21 @@ def delete_budget(budget_id):
     if not _valid_id(budget_id):
         return jsonify({"message": "budget_id must be a positive integer"}), 400
 
+    existing = supabase.table("budgets") \
+        .select("*") \
+        .eq("budget_id", budget_id) \
+        .limit(1) \
+        .execute()
+
+    if not existing.data:
+        return jsonify({"message": "Budget not found"}), 404
+
     response = supabase.table("budgets") \
         .delete() \
         .eq("budget_id", budget_id) \
         .execute()
 
-    deleted_budget = response.data[0] if response.data else {}
+    deleted_budget = existing.data[0]
     audit_user_id = data.get("user_id", deleted_budget.get("user_id"))
     log_audit_action(audit_user_id, "DELETE", "budgets", budget_id)
 

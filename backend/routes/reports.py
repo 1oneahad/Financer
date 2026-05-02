@@ -10,11 +10,17 @@ VALID_REPORT_TYPES = {"monthly_summary", "by_category", "date_range"}
 
 
 def _to_float(value):
-    return float(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _valid_id(value):
-    return int(value) > 0
+    try:
+        return int(value) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def _looks_like_date(value):
@@ -184,7 +190,7 @@ def generate_report():
         }).execute()
 
         report_record = report_response.data[0] if report_response.data else {}
-        log_audit_action(user_id, "INSERT", "reports", report_record.get("report_id"))
+        log_audit_action(int(user_id), "INSERT", "reports", report_record.get("report_id"))
 
         return jsonify({
             "message": "Report generated",
@@ -218,12 +224,21 @@ def delete_report(report_id):
     if not _valid_id(report_id):
         return jsonify({"message": "report_id must be a positive integer"}), 400
 
+    existing = supabase.table("reports") \
+        .select("*") \
+        .eq("report_id", report_id) \
+        .limit(1) \
+        .execute()
+
+    if not existing.data:
+        return jsonify({"message": "Report not found"}), 404
+
     response = supabase.table("reports") \
         .delete() \
         .eq("report_id", report_id) \
         .execute()
 
-    deleted_report = response.data[0] if response.data else {}
+    deleted_report = existing.data[0]
     audit_user_id = data.get("user_id", deleted_report.get("user_id"))
     log_audit_action(audit_user_id, "DELETE", "reports", report_id)
 

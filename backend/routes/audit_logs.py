@@ -6,7 +6,10 @@ audit_log_routes = Blueprint("audit_logs", __name__)
 
 
 def _valid_id(value):
-    return int(value) > 0
+    try:
+        return int(value) > 0
+    except (TypeError, ValueError):
+        return False
 
 def log_audit_action(user_id, action, target_table, target_id):
     try:

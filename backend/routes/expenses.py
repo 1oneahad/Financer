@@ -6,11 +6,17 @@ expense_routes = Blueprint('expenses', __name__)
 
 
 def _valid_id(value):
-    return int(value) > 0
+    try:
+        return int(value) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def _valid_amount(value):
-    return float(value) > 0
+    try:
+        return float(value) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def _looks_like_date(value):
@@ -47,15 +53,15 @@ def add_expense():
 
     try:
         response = supabase.table("expenses").insert({
-            "user_id": user_id,
-            "category_id": category_id,
-            "amount": amount,
+            "user_id": int(user_id),
+            "category_id": int(category_id),
+            "amount": float(amount),
             "expense_date": expense_date,
             "notes": notes or ""
         }).execute()
 
         created = response.data[0] if response.data else {}
-        log_audit_action(user_id, "INSERT", "expenses", created.get("expense_id"))
+        log_audit_action(int(user_id), "INSERT", "expenses", created.get("expense_id"))
 
         return jsonify({
             "message": "Expense added",
@@ -69,20 +75,16 @@ def add_expense():
 
 @expense_routes.route('/expenses/<user_id>', methods=['GET'])
 def get_expenses(user_id):
-    try:
-        if not _valid_id(user_id):
-            return jsonify({"message": "user_id must be a positive integer"}), 400
+    if not _valid_id(user_id):
+        return jsonify({"message": "user_id must be a positive integer"}), 400
 
-        response = supabase.table("expenses") \
-            .select("*") \
-            .eq("user_id", user_id) \
-            .order("expense_date", desc=True) \
-            .execute()
+    response = supabase.table("expenses") \
+        .select("*") \
+        .eq("user_id", user_id) \
+        .order("expense_date", desc=True) \
+        .execute()
 
-        return jsonify(response.data)
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify(response.data)
 
 
 @expense_routes.route('/expense/<expense_id>', methods=['GET'])
@@ -111,12 +113,21 @@ def delete_expense(expense_id):
     if not _valid_id(expense_id):
         return jsonify({"message": "expense_id must be a positive integer"}), 400
 
+    existing = supabase.table("expenses") \
+        .select("*") \
+        .eq("expense_id", expense_id) \
+        .limit(1) \
+        .execute()
+
+    if not existing.data:
+        return jsonify({"message": "Expense not found"}), 404
+
     response = supabase.table("expenses") \
         .delete() \
         .eq("expense_id", expense_id) \
         .execute()
 
-    deleted = response.data[0] if response.data else {}
+    deleted = existing.data[0]
     audit_user_id = data.get("user_id", deleted.get("user_id"))
     log_audit_action(audit_user_id, "DELETE", "expenses", expense_id)
 
@@ -148,25 +159,26 @@ def update_expense(expense_id):
                 return jsonify({"message": "notes must be text"}), 400
             updates[key] = data[key]
 
+    if "amount" in updates:
+        updates["amount"] = float(updates["amount"])
+    if "category_id" in updates:
+        updates["category_id"] = int(updates["category_id"])
+
     if not updates:
         return jsonify({"message": "At least one updatable field is required"}), 400
 
-    try:
-        response = supabase.table("expenses") \
-            .update(updates) \
-            .eq("expense_id", expense_id) \
-            .execute()
+    response = supabase.table("expenses") \
+        .update(updates) \
+        .eq("expense_id", expense_id) \
+        .execute()
 
-        updated = response.data[0] if response.data else {}
-        audit_user_id = data.get("user_id", updated.get("user_id"))
-        log_audit_action(audit_user_id, "UPDATE", "expenses", expense_id)
+    updated = response.data[0] if response.data else {}
+    audit_user_id = data.get("user_id", updated.get("user_id"))
+    log_audit_action(audit_user_id, "UPDATE", "expenses", expense_id)
 
-        return jsonify({
-            "message": "Expense updated",
-            "data": response.data
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({
+        "message": "Expense updated",
+        "data": response.data
+    })
 
 
