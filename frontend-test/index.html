@@ -11,8 +11,8 @@
     <header class="hero">
       <div>
         <p class="eyebrow">Financer</p>
-        <h1>Simple expense tracking for the project demo</h1>
-        <p class="subtext">Use the forms below to test auth, categories, expenses, budgets, reports, and admin user management.</p>
+        <h1>API flow demo for the main website</h1>
+        <p class="subtext">Use these panels to show what the frontend sends to the backend, what comes back, and how the main dashboard uses those responses.</p>
       </div>
       <div class="base-box">
         <label for="baseUrl">Backend URL</label>
@@ -24,6 +24,7 @@
     <main class="grid">
       <section class="card">
         <h2>Auth</h2>
+        <div id="sessionState" class="session-state">No active session</div>
         <div class="split">
           <form id="registerForm" class="stack">
             <h3>Register</h3>
@@ -43,6 +44,24 @@
       </section>
 
       <section class="card">
+        <h2>Main Website Data Calls</h2>
+        <p class="note">These are the same dashboard calls used by the main frontend after login.</p>
+        <div class="split">
+          <form id="syncUserForm" class="stack">
+            <h3>Sync User</h3>
+            <input name="user_id" type="number" min="1" placeholder="User ID" required />
+            <button type="submit">GET /user/:id</button>
+          </form>
+          <form id="dashboardCallsForm" class="stack">
+            <h3>Dashboard Calls</h3>
+            <input name="user_id" type="number" min="1" placeholder="User ID" required />
+            <button type="submit">Load Dashboard API Data</button>
+          </form>
+        </div>
+        <pre id="dashboardOutput" class="output tall"></pre>
+      </section>
+
+      <section class="card">
         <h2>Categories</h2>
         <div class="split">
           <form id="addCategoryForm" class="stack">
@@ -54,7 +73,10 @@
             <button type="submit">Add Category</button>
           </form>
           <div class="stack">
-            <button id="loadCategories" type="button">Load Categories</button>
+            <form id="loadCategoriesForm" class="inline-form">
+              <input name="user_id" type="number" min="1" placeholder="Optional User ID" />
+              <button type="submit">Load Categories</button>
+            </form>
             <pre id="categoriesOutput" class="output"></pre>
           </div>
         </div>
@@ -106,6 +128,13 @@
             <input name="notes" placeholder="Notes" />
             <button type="submit">Update</button>
           </form>
+          <form id="getExpenseForm" class="stack small-form">
+            <h3>Get One</h3>
+            <input name="expense_id" type="number" min="1" placeholder="Expense ID" required />
+            <button type="submit">Get Expense</button>
+          </form>
+        </div>
+        <div class="split">
           <form id="deleteExpenseForm" class="stack small-form">
             <h3>Delete</h3>
             <input name="expense_id" type="number" min="1" placeholder="Expense ID" required />
@@ -186,6 +215,18 @@
             <pre id="reportsOutput" class="output"></pre>
           </div>
         </div>
+        <div class="split">
+          <form id="deleteReportForm" class="stack small-form">
+            <h3>Delete</h3>
+            <input name="report_id" type="number" min="1" placeholder="Report ID" required />
+            <input name="user_id" type="number" min="1" placeholder="User ID" />
+            <button type="submit">Delete Report</button>
+          </form>
+          <div class="stack">
+            <h3>Report Response Shape</h3>
+            <p class="note">Generated and loaded reports now include summary totals, category breakdown, recent transactions, and budget-vs-actual views.</p>
+          </div>
+        </div>
       </section>
 
       <section class="card">
@@ -219,6 +260,27 @@
           </form>
         </div>
         <pre id="adminOutput" class="output"></pre>
+      </section>
+
+      <section class="card">
+        <h2>Admin Data Tables</h2>
+        <div class="split">
+          <form id="adminResourceForm" class="stack">
+            <h3>List Resource</h3>
+            <input name="admin_user_id" type="number" min="1" placeholder="Admin User ID" required />
+            <select name="resource" required>
+              <option value="audit-logs">audit-logs</option>
+              <option value="expenses">expenses</option>
+              <option value="categories">categories</option>
+              <option value="budgets">budgets</option>
+              <option value="reports">reports</option>
+            </select>
+            <input name="limit" type="number" min="1" max="250" placeholder="Audit limit, default 100" />
+            <button type="submit">Load Admin Resource</button>
+          </form>
+          <pre id="adminResourceOutput" class="output tall"></pre>
+        </div>
+        <p class="note">Admin edit/delete endpoints for expenses, categories, budgets, and reports are available in the backend; this panel lists the current data used before choosing records to change.</p>
       </section>
     </main>
   </div>

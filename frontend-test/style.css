@@ -61,6 +61,24 @@ h1 {
   font-size: 1.02rem;
 }
 
+.note,
+.session-state {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.session-state {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--accent-dark);
+  font-weight: 700;
+}
+
 .base-box,
 .card {
   background: linear-gradient(180deg, var(--panel), #fff8ef);
@@ -177,6 +195,10 @@ label input[type="checkbox"] {
   border-radius: 16px;
   overflow: auto;
   font-size: 0.86rem;
+}
+
+.output.tall {
+  min-height: 240px;
 }
 
 @media (max-width: 960px) {
