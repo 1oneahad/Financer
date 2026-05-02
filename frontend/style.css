@@ -673,6 +673,61 @@ th {
   background: rgba(251, 113, 133, 0.05);
 }
 
+.report-meta,
+.muted-cell {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.report-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(96px, 1fr));
+  gap: 8px;
+  min-width: 230px;
+}
+
+.report-summary-grid span {
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.report-summary-grid strong,
+.report-summary-grid small {
+  display: block;
+}
+
+.report-summary-grid small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.report-mini-list {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  min-width: 220px;
+}
+
+.report-mini-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.report-mini-list span {
+  color: var(--muted-strong);
+  line-height: 1.35;
+}
+
 .admin-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -686,6 +741,10 @@ th {
 
 .admin-kpi-grid .kpi-card h3 {
   font-size: clamp(1.7rem, 3vw, 2.45rem);
+}
+
+.admin-kpi-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .admin-inline-form {
@@ -781,6 +840,43 @@ th {
   color: #fef3c7;
   border-color: rgba(245, 158, 11, 0.26);
   background: rgba(245, 158, 11, 0.12);
+}
+
+.audit-table strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.audit-muted {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.audit-state {
+  margin-top: 8px;
+  width: fit-content;
+  padding: 5px 9px;
+  font-size: 0.74rem;
+}
+
+.audit-action-insert {
+  color: #d1fae5;
+  border-color: rgba(52, 211, 153, 0.28);
+  background: rgba(52, 211, 153, 0.14);
+}
+
+.audit-action-update {
+  color: #e0f2fe;
+  border-color: rgba(56, 189, 248, 0.28);
+  background: rgba(56, 189, 248, 0.14);
+}
+
+.audit-action-delete {
+  color: #ffe4ea;
+  border-color: rgba(251, 113, 133, 0.3);
+  background: rgba(251, 113, 133, 0.15);
 }
 
 .users-table-wrap {

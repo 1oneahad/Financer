@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify
 
 from db import supabase
 from routes.budgets import normalize_budget_rows
+from routes.common import is_positive_int, parse_date
 
 
 insight_routes = Blueprint("insights", __name__)
@@ -19,17 +20,6 @@ _TRANSIENT_SUPABASE_ERRORS = (
     httpx.RemoteProtocolError,
     httpx.NetworkError,
 )
-
-
-def _valid_id(value):
-    try:
-        return int(value) > 0
-    except (TypeError, ValueError):
-        return False
-
-
-def _parse_date(value):
-    return date.fromisoformat(str(value))
 
 
 def _month_range(for_date=None):
@@ -82,7 +72,7 @@ def _load_categories():
 
 @insight_routes.route("/insights/spent-by-category/<user_id>", methods=["GET"])
 def spent_by_category(user_id):
-    if not _valid_id(user_id):
+    if not is_positive_int(user_id):
         return jsonify({"message": "user_id must be a positive integer"}), 400
 
     user = _get_user(user_id)
@@ -124,7 +114,7 @@ def spent_by_category(user_id):
 
 @insight_routes.route("/insights/total-monthly/<user_id>", methods=["GET"])
 def total_monthly(user_id):
-    if not _valid_id(user_id):
+    if not is_positive_int(user_id):
         return jsonify({"message": "user_id must be a positive integer"}), 400
 
     user = _get_user(user_id)
@@ -152,7 +142,7 @@ def total_monthly(user_id):
 
 @insight_routes.route("/insights/budget-vs-actual/<user_id>", methods=["GET"])
 def budget_vs_actual(user_id):
-    if not _valid_id(user_id):
+    if not is_positive_int(user_id):
         return jsonify({"message": "user_id must be a positive integer"}), 400
 
     user = _get_user(user_id)
@@ -175,15 +165,15 @@ def budget_vs_actual(user_id):
     rows = []
 
     for budget in normalize_budget_rows(budgets.data):
-        start_date = _parse_date(budget["start_date"])
+        start_date = parse_date(budget["start_date"])
         budget_start = start_date
-        budget_end = _parse_date(budget["end_date"])
+        budget_end = parse_date(budget["end_date"])
 
         spent = 0.0
         for expense in expense_rows:
             if int(expense["category_id"]) != int(budget["category_id"]):
                 continue
-            expense_date = _parse_date(expense["expense_date"])
+            expense_date = parse_date(expense["expense_date"])
             if budget_start <= expense_date <= budget_end:
                 spent += float(expense.get("amount") or 0)
 
@@ -211,7 +201,7 @@ def budget_vs_actual(user_id):
 
 @insight_routes.route("/insights/recent-transactions/<user_id>", methods=["GET"])
 def recent_transactions(user_id):
-    if not _valid_id(user_id):
+    if not is_positive_int(user_id):
         return jsonify({"message": "user_id must be a positive integer"}), 400
 
     user = _get_user(user_id)

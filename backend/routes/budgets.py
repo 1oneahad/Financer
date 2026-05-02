@@ -3,35 +3,14 @@ from datetime import date, timedelta
 from flask import Blueprint, request, jsonify
 from db import supabase
 from routes.audit_logs import log_audit_action
+from routes.common import is_positive_amount, is_positive_int, looks_like_date, parse_date
 
 
 budget_routes = Blueprint("budgets", __name__)
 
 
-def _valid_id(value):
-    try:
-        return int(value) > 0
-    except (TypeError, ValueError):
-        return False
-
-
-def _valid_amount(value):
-    try:
-        return float(value) > 0
-    except (TypeError, ValueError):
-        return False
-
-
-def _looks_like_date(value):
-    return isinstance(value, str) and len(value.strip()) == 10 and value.count("-") == 2
-
-
-def _parse_date(value):
-    return date.fromisoformat(str(value))
-
-
 def _end_date_for_period(start_date, period):
-    parsed_start = _parse_date(start_date)
+    parsed_start = parse_date(start_date)
 
     if period == "weekly":
         return (parsed_start + timedelta(days=6)).isoformat()
@@ -46,15 +25,15 @@ def _end_date_for_period(start_date, period):
 
 def _period_from_dates(start_date, end_date):
     try:
-        parsed_start = _parse_date(start_date)
-        parsed_end = _parse_date(end_date)
+        parsed_start = parse_date(start_date)
+        parsed_end = parse_date(end_date)
     except (TypeError, ValueError):
         return None
 
     if parsed_end == parsed_start + timedelta(days=6):
         return "weekly"
 
-    if parsed_end == _parse_date(_end_date_for_period(start_date, "monthly")):
+    if parsed_end == parse_date(_end_date_for_period(start_date, "monthly")):
         return "monthly"
 
     return "custom"
@@ -84,19 +63,19 @@ def add_budget():
     if not user_id or not category_id or amount_limit is None or not period or not start_date:
         return jsonify({"message": "user_id, category_id, amount_limit, period, and start_date are required"}), 400
 
-    if not _valid_id(user_id):
+    if not is_positive_int(user_id):
         return jsonify({"message": "user_id must be a positive integer"}), 400
 
-    if not _valid_id(category_id):
+    if not is_positive_int(category_id):
         return jsonify({"message": "category_id must be a positive integer"}), 400
 
-    if not _valid_amount(amount_limit):
+    if not is_positive_amount(amount_limit):
         return jsonify({"message": "amount_limit must be greater than 0"}), 400
 
     if period not in {"weekly", "monthly"}:
         return jsonify({"message": "period must be weekly or monthly"}), 400
 
-    if not _looks_like_date(start_date):
+    if not looks_like_date(start_date):
         return jsonify({"message": "start_date must look like YYYY-MM-DD"}), 400
 
     try:
@@ -123,7 +102,7 @@ def add_budget():
 
 @budget_routes.route("/budgets/<user_id>", methods=["GET"])
 def get_budgets(user_id):
-    if not _valid_id(user_id):
+    if not is_positive_int(user_id):
         return jsonify({"message": "user_id must be a positive integer"}), 400
 
     response = supabase.table("budgets") \
@@ -140,7 +119,7 @@ def get_budgets(user_id):
 def update_budget(budget_id):
     data = request.get_json(silent=True) or {}
 
-    if not _valid_id(budget_id):
+    if not is_positive_int(budget_id):
         return jsonify({"message": "budget_id must be a positive integer"}), 400
 
     existing = None
@@ -158,11 +137,11 @@ def update_budget(budget_id):
     period = data.get("period")
     for key in ("category_id", "amount_limit", "start_date"):
         if key in data:
-            if key == "category_id" and not _valid_id(data.get("category_id")):
+            if key == "category_id" and not is_positive_int(data.get("category_id")):
                 return jsonify({"message": "category_id must be a positive integer"}), 400
-            if key == "amount_limit" and not _valid_amount(data.get("amount_limit")):
+            if key == "amount_limit" and not is_positive_amount(data.get("amount_limit")):
                 return jsonify({"message": "amount_limit must be greater than 0"}), 400
-            if key == "start_date" and not _looks_like_date(data.get("start_date")):
+            if key == "start_date" and not looks_like_date(data.get("start_date")):
                 return jsonify({"message": "start_date must look like YYYY-MM-DD"}), 400
             updates[key] = data[key]
 
@@ -206,7 +185,7 @@ def update_budget(budget_id):
 def delete_budget(budget_id):
     data = request.get_json(silent=True) or {}
 
-    if not _valid_id(budget_id):
+    if not is_positive_int(budget_id):
         return jsonify({"message": "budget_id must be a positive integer"}), 400
 
     existing = supabase.table("budgets") \

@@ -1,29 +1,12 @@
 from flask import Blueprint, request, jsonify
 from db import supabase
 from routes.audit_logs import log_audit_action
+from routes.common import is_positive_amount, is_positive_int, looks_like_date
 
-expense_routes = Blueprint('expenses', __name__)
-
-
-def _valid_id(value):
-    try:
-        return int(value) > 0
-    except (TypeError, ValueError):
-        return False
+expense_routes = Blueprint("expenses", __name__)
 
 
-def _valid_amount(value):
-    try:
-        return float(value) > 0
-    except (TypeError, ValueError):
-        return False
-
-
-def _looks_like_date(value):
-    return isinstance(value, str) and len(value.strip()) == 10 and value.count("-") == 2
-
-
-@expense_routes.route('/add-expense', methods=['POST'])
+@expense_routes.route("/add-expense", methods=["POST"])
 def add_expense():
     data = request.get_json(silent=True) or {}
 
@@ -35,16 +18,16 @@ def add_expense():
     if not user_id or not category_id or amount is None or not expense_date:
         return jsonify({"message": "user_id, category_id, amount, and expense_date are required"}), 400
 
-    if not _valid_id(user_id):
+    if not is_positive_int(user_id):
         return jsonify({"message": "user_id must be a positive integer"}), 400
 
-    if not _valid_id(category_id):
+    if not is_positive_int(category_id):
         return jsonify({"message": "category_id must be a positive integer"}), 400
 
-    if not _valid_amount(amount):
+    if not is_positive_amount(amount):
         return jsonify({"message": "amount must be greater than 0"}), 400
 
-    if not _looks_like_date(expense_date):
+    if not looks_like_date(expense_date):
         return jsonify({"message": "expense_date must look like YYYY-MM-DD"}), 400
 
     notes = data.get("notes", "")
@@ -57,7 +40,7 @@ def add_expense():
             "category_id": int(category_id),
             "amount": float(amount),
             "expense_date": expense_date,
-            "notes": notes or ""
+            "notes": notes or "",
         }).execute()
 
         created = response.data[0] if response.data else {}
@@ -65,17 +48,15 @@ def add_expense():
 
         return jsonify({
             "message": "Expense added",
-            "data": response.data
+            "data": response.data,
         })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
-
-@expense_routes.route('/expenses/<user_id>', methods=['GET'])
+@expense_routes.route("/expenses/<user_id>", methods=["GET"])
 def get_expenses(user_id):
-    if not _valid_id(user_id):
+    if not is_positive_int(user_id):
         return jsonify({"message": "user_id must be a positive integer"}), 400
 
     response = supabase.table("expenses") \
@@ -87,9 +68,9 @@ def get_expenses(user_id):
     return jsonify(response.data)
 
 
-@expense_routes.route('/expense/<expense_id>', methods=['GET'])
+@expense_routes.route("/expense/<expense_id>", methods=["GET"])
 def get_expense(expense_id):
-    if not _valid_id(expense_id):
+    if not is_positive_int(expense_id):
         return jsonify({"message": "expense_id must be a positive integer"}), 400
 
     response = supabase.table("expenses") \
@@ -103,14 +84,11 @@ def get_expense(expense_id):
 
     return jsonify(response.data[0])
 
-
-
-
-@expense_routes.route('/delete-expense/<expense_id>', methods=['DELETE'])
+@expense_routes.route("/delete-expense/<expense_id>", methods=["DELETE"])
 def delete_expense(expense_id):
     data = request.get_json(silent=True) or {}
 
-    if not _valid_id(expense_id):
+    if not is_positive_int(expense_id):
         return jsonify({"message": "expense_id must be a positive integer"}), 400
 
     existing = supabase.table("expenses") \
@@ -133,27 +111,25 @@ def delete_expense(expense_id):
 
     return jsonify({
         "message": "Expense deleted",
-        "data": response.data
+        "data": response.data,
     })
 
 
-
-
-@expense_routes.route('/update-expense/<expense_id>', methods=['PUT'])
+@expense_routes.route("/update-expense/<expense_id>", methods=["PUT"])
 def update_expense(expense_id):
     data = request.get_json(silent=True) or {}
 
-    if not _valid_id(expense_id):
+    if not is_positive_int(expense_id):
         return jsonify({"message": "expense_id must be a positive integer"}), 400
 
     updates = {}
     for key in ("amount", "category_id", "notes", "expense_date"):
         if key in data:
-            if key == "amount" and not _valid_amount(data.get("amount")):
+            if key == "amount" and not is_positive_amount(data.get("amount")):
                 return jsonify({"message": "amount must be greater than 0"}), 400
-            if key == "category_id" and not _valid_id(data.get("category_id")):
+            if key == "category_id" and not is_positive_int(data.get("category_id")):
                 return jsonify({"message": "category_id must be a positive integer"}), 400
-            if key == "expense_date" and not _looks_like_date(data.get("expense_date")):
+            if key == "expense_date" and not looks_like_date(data.get("expense_date")):
                 return jsonify({"message": "expense_date must look like YYYY-MM-DD"}), 400
             if key == "notes" and data.get("notes") is not None and not isinstance(data.get("notes"), str):
                 return jsonify({"message": "notes must be text"}), 400
@@ -178,7 +154,7 @@ def update_expense(expense_id):
 
     return jsonify({
         "message": "Expense updated",
-        "data": response.data
+        "data": response.data,
     })
 
 

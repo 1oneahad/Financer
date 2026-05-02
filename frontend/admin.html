@@ -47,6 +47,7 @@
           <button class="workspace-nav-button" type="button" data-admin-target="categoriesCard">Categories</button>
           <button class="workspace-nav-button" type="button" data-admin-target="expensesCard">Expenses</button>
           <button class="workspace-nav-button" type="button" data-admin-target="reportsCard">Reports</button>
+          <button class="workspace-nav-button" type="button" data-admin-target="auditLogsCard">Activity</button>
         </div>
 
         <p id="adminNavMessage" class="workspace-nav-message">Jump between admin data areas without leaving the page.</p>
@@ -108,6 +109,12 @@
           <div class="kpi-label">Budgets</div>
           <h3 id="budgetCount">0</h3>
           <p class="subtext">Loaded limits</p>
+        </article>
+
+        <article class="kpi-card glass-surface">
+          <div class="kpi-label">Activity</div>
+          <h3 id="auditLogCount">0</h3>
+          <p class="subtext">Recent events</p>
         </article>
       </section>
 
@@ -263,6 +270,34 @@
           </table>
         </div>
       </section>
+
+      <section class="workspace-section glass-surface" id="auditLogsCard">
+        <div class="section-head workspace-head">
+          <div>
+            <p class="eyebrow">Activity</p>
+            <h2>Audit log</h2>
+            <p class="subtext">Recent inserts, updates, and deletes with resolved users and target records.</p>
+          </div>
+          <button id="loadAuditLogsBtn" class="ghost-button" type="button">Load activity</button>
+        </div>
+
+        <div class="table-wrap admin-table-wrap tall-table">
+          <table class="admin-table audit-table" id="auditLogsTable">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Actor</th>
+                <th>Target</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="auditLogsBody">
+              <tr><td colspan="5" class="empty-cell">No activity loaded yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -288,6 +323,23 @@
 
     function setEmpty(tbodyId, colspan, message) {
       document.getElementById(tbodyId).innerHTML = `<tr><td colspan="${colspan}" class="empty-cell">${message}</td></tr>`;
+    }
+
+    function formatDateTime(value) {
+      if (!value) return '-';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleString([], {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    function actionClass(action) {
+      return `audit-action-${String(action || '').toLowerCase()}`;
     }
 
     async function syncRoleFromBackend() {
@@ -341,7 +393,7 @@
     }
 
     async function loadAdminOverview() {
-      await Promise.all([loadUsers(), loadCategories(), loadExpenses(), loadBudgets(), loadReports()]);
+      await Promise.all([loadUsers(), loadCategories(), loadExpenses(), loadBudgets(), loadReports(), loadAuditLogs()]);
     }
 
     async function loadUsers() {
@@ -424,6 +476,7 @@
         if (response.ok) {
           document.getElementById('newCategoryName').value = '';
           loadCategories();
+          loadAuditLogs();
         } else {
           alert('Error: ' + (result.message || 'Failed to add category'));
         }
@@ -444,6 +497,7 @@
         const result = await response.json();
         if (response.ok) {
           loadCategories();
+          loadAuditLogs();
         } else {
           alert('Error: ' + (result.message || 'Failed to delete category'));
         }
@@ -467,6 +521,7 @@
         const result = await response.json();
         if (response.ok) {
           loadCategories();
+          loadAuditLogs();
         } else {
           alert('Error: ' + (result.message || 'Failed to update category'));
         }
@@ -492,6 +547,7 @@
         const result = await response.json();
         if (response.ok) {
           loadUsers();
+          loadAuditLogs();
         } else {
           alert('Error: ' + (result.message || 'Failed to update role'));
         }
@@ -512,6 +568,7 @@
         const result = await response.json();
         if (response.ok) {
           loadUsers();
+          loadAuditLogs();
         } else {
           alert('Error: ' + (result.message || 'Failed to delete user'));
         }
@@ -561,6 +618,7 @@
         const result = await response.json();
         if (response.ok) {
           loadExpenses();
+          loadAuditLogs();
         } else {
           alert('Error: ' + (result.message || 'Failed to delete expense'));
         }
@@ -609,6 +667,7 @@
         const result = await response.json();
         if (response.ok) {
           loadBudgets();
+          loadAuditLogs();
         } else {
           alert('Error: ' + (result.message || 'Failed to delete budget'));
         }
@@ -645,6 +704,51 @@
       }
     }
 
+    async function loadAuditLogs() {
+      if (!currentAdminUserId) return;
+      try {
+        const response = await fetch(`${baseUrl()}/admin/audit-logs?admin_user_id=${currentAdminUserId}&limit=100`);
+        const logs = await response.json();
+        const tbody = document.getElementById('auditLogsBody');
+        setCount('auditLogCount', logs);
+
+        if (!response.ok) {
+          setEmpty('auditLogsBody', 5, logs.message || 'Unable to load audit logs.');
+          return;
+        }
+
+        if (Array.isArray(logs) && logs.length) {
+          tbody.innerHTML = logs.map(log => {
+            const target = log.target || {};
+            const actor = log.actor || {};
+            return `
+              <tr>
+                <td>${escapeHtml(formatDateTime(log.action_time))}</td>
+                <td><span class="status-badge ${actionClass(log.action)}">${escapeHtml(log.action)}</span></td>
+                <td>
+                  <strong>${escapeHtml(actor.label || 'System')}</strong>
+                  <span class="audit-muted">${actor.id ? '#' + escapeHtml(actor.id) : ''}</span>
+                </td>
+                <td>
+                  <strong>${escapeHtml(target.label || `${log.target_table} #${log.target_id}`)}</strong>
+                  <span class="audit-muted">${escapeHtml(target.table || log.target_table)} #${escapeHtml(target.id || log.target_id)}</span>
+                </td>
+                <td>
+                  <span>${escapeHtml(target.detail || '-')}</span>
+                  ${target.exists === false ? '<span class="pill danger audit-state">Removed</span>' : ''}
+                </td>
+              </tr>
+            `;
+          }).join('');
+        } else {
+          setEmpty('auditLogsBody', 5, 'No audit activity found.');
+        }
+      } catch (error) {
+        console.error(error);
+        setEmpty('auditLogsBody', 5, 'Unable to load audit logs.');
+      }
+    }
+
     async function adminDeleteReport(reportId) {
       if (!confirm('Delete report #' + reportId + '?')) return;
       try {
@@ -656,6 +760,7 @@
         const result = await response.json();
         if (response.ok) {
           loadReports();
+          loadAuditLogs();
         } else {
           alert('Error: ' + (result.message || 'Failed to delete report'));
         }
@@ -681,6 +786,7 @@
       document.getElementById('loadExpensesBtn').addEventListener('click', loadExpenses);
       document.getElementById('loadBudgetsBtn').addEventListener('click', loadBudgets);
       document.getElementById('loadReportsBtn').addEventListener('click', loadReports);
+      document.getElementById('loadAuditLogsBtn').addEventListener('click', loadAuditLogs);
 
       document.querySelectorAll('[data-admin-target]').forEach(button => {
         button.addEventListener('click', () => {

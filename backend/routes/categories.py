@@ -1,15 +1,9 @@
 from flask import Blueprint, request, jsonify
 from db import supabase
 from routes.audit_logs import log_audit_action
+from routes.common import is_positive_int
 
-category_routes = Blueprint('categories', __name__)
-
-
-def _valid_id(value):
-    try:
-        return int(value) > 0
-    except (TypeError, ValueError):
-        return False
+category_routes = Blueprint("categories", __name__)
 
 
 def _get_user_role(user_id):
@@ -25,28 +19,20 @@ def _get_user_role(user_id):
     return response.data[0].get("role")
 
 
-@category_routes.route('/categories', methods=['GET'])
+@category_routes.route("/categories", methods=["GET"])
 def get_categories():
-    # optional filter: show default categories plus those created by a specific user
     user_id = request.args.get("user_id")
-
     query = supabase.table("categories").select("*")
 
     if user_id is not None:
-        try:
-            uid = int(user_id)
-            # return defaults (is_default = true) OR created_by = user
-            query = query.or_(f"is_default.eq.true,created_by.eq.{uid}")
-        except Exception:
-            return jsonify({"message": "user_id must be an integer"}), 400
+        if not is_positive_int(user_id):
+            return jsonify({"message": "user_id must be a positive integer"}), 400
+        query = query.or_(f"is_default.eq.true,created_by.eq.{int(user_id)}")
 
     response = query.order("category_id").execute()
     return jsonify(response.data)
 
-
-
-
-@category_routes.route('/add-category', methods=['POST'])
+@category_routes.route("/add-category", methods=["POST"])
 def add_category():
     data = request.get_json(silent=True) or {}
 
@@ -62,7 +48,7 @@ def add_category():
     if created_by is None:
         return jsonify({"message": "user_id is required to add a category"}), 400
 
-    if not _valid_id(created_by):
+    if not is_positive_int(created_by):
         return jsonify({"message": "user_id must be a positive integer"}), 400
 
     role = _get_user_role(created_by)
@@ -70,8 +56,7 @@ def add_category():
         return jsonify({"message": "premium access required to add categories"}), 403
 
     try:
-        # admin-created categories are marked as default/global
-        is_default = True if role == "admin" else False
+        is_default = role == "admin"
         response = supabase.table("categories").insert({
             "name": name,
             "description": data.get("description") or "",
@@ -84,18 +69,18 @@ def add_category():
 
         return jsonify({
             "message": "Category added",
-            "data": response.data
+            "data": response.data,
         })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
-@category_routes.route('/update-category/<category_id>', methods=['PUT'])
+@category_routes.route("/update-category/<category_id>", methods=["PUT"])
 def update_category(category_id):
     data = request.get_json(silent=True) or {}
 
-    if not _valid_id(category_id):
+    if not is_positive_int(category_id):
         return jsonify({"message": "category_id must be a positive integer"}), 400
 
     updates = {}
@@ -123,15 +108,15 @@ def update_category(category_id):
 
     return jsonify({
         "message": "Category updated",
-        "data": response.data
+        "data": response.data,
     })
 
 
-@category_routes.route('/delete-category/<category_id>', methods=['DELETE'])
+@category_routes.route("/delete-category/<category_id>", methods=["DELETE"])
 def delete_category(category_id):
     data = request.get_json(silent=True) or {}
 
-    if not _valid_id(category_id):
+    if not is_positive_int(category_id):
         return jsonify({"message": "category_id must be a positive integer"}), 400
 
     existing = supabase.table("categories") \
@@ -154,5 +139,5 @@ def delete_category(category_id):
 
     return jsonify({
         "message": "Category deleted",
-        "data": response.data
+        "data": response.data,
     })
