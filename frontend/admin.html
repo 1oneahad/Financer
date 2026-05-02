@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Financer - Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="page-glow glow-a"></div>
+  <div class="page-glow glow-b"></div>
+  <div class="page-grid-overlay"></div>
+
+  <div class="app-shell">
+    <aside class="sidebar glass-surface">
+      <div class="brand-block">
+        <div class="brand-mark">F</div>
+        <div>
+          <p class="eyebrow">Financer</p>
+          <h1>Admin console</h1>
+        </div>
+      </div>
+
+      <p class="sidebar-copy">
+        A focused management workspace for users, categories, expenses, budgets, and reports.
+      </p>
+
+      <div class="info-card">
+        <div class="info-card-label">Session</div>
+        <strong id="adminBadge">Loading...</strong>
+        <p id="adminRoleText">Admin tools load after your role is confirmed.</p>
+      </div>
+
+      <div class="sidebar-nav-card">
+        <div class="section-head small">
+          <div>
+            <p class="eyebrow">Workspace</p>
+            <h2>Quick access</h2>
+          </div>
+        </div>
+
+        <div class="sidebar-nav">
+          <button class="workspace-nav-button" type="button" data-admin-target="usersCard">Users</button>
+          <button class="workspace-nav-button" type="button" data-admin-target="categoriesCard">Categories</button>
+          <button class="workspace-nav-button" type="button" data-admin-target="expensesCard">Expenses</button>
+          <button class="workspace-nav-button" type="button" data-admin-target="reportsCard">Reports</button>
+        </div>
+
+        <p id="adminNavMessage" class="workspace-nav-message">Jump between admin data areas without leaving the page.</p>
+      </div>
+
+      <div class="settings-card">
+        <div class="section-head small">
+          <div>
+            <p class="eyebrow">Session</p>
+            <h2>Control</h2>
+          </div>
+        </div>
+        <div class="sidebar-nav">
+          <button id="syncRoleBtn" class="ghost-button full-width-button" type="button">Sync Role</button>
+          <button id="dashboardButton" class="ghost-button full-width-button" type="button">Dashboard</button>
+          <button id="logoutButton" class="danger-button full-width-button" type="button">Logout</button>
+        </div>
+        <p class="helper-text">Sync role if permissions changed while this page was open.</p>
+      </div>
+
+      <div class="sidebar-footnote">
+        Admin actions depend on the backend role check. The UI mirrors the dashboard, but protected routes still decide access.
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar glass-surface">
+        <div>
+          <p class="eyebrow">Admin</p>
+          <h2 id="adminHeading">Management Console</h2>
+          <p id="adminSubtext" class="subtext">Review and modify site data from one role-aware workspace.</p>
+        </div>
+        <div class="topbar-actions">
+          <span id="sessionBadge" class="badge">Admin mode</span>
+          <button id="refreshAdminButton" class="ghost-button" type="button">Refresh</button>
+        </div>
+      </header>
+
+      <section class="kpi-grid admin-kpi-grid">
+        <article class="kpi-card glass-surface">
+          <div class="kpi-label">Users</div>
+          <h3 id="userCount">0</h3>
+          <p class="subtext">Loaded accounts</p>
+        </article>
+
+        <article class="kpi-card glass-surface">
+          <div class="kpi-label">Categories</div>
+          <h3 id="categoryCount">0</h3>
+          <p class="subtext">System and custom</p>
+        </article>
+
+        <article class="kpi-card glass-surface">
+          <div class="kpi-label">Expenses</div>
+          <h3 id="expenseCount">0</h3>
+          <p class="subtext">Loaded records</p>
+        </article>
+
+        <article class="kpi-card glass-surface">
+          <div class="kpi-label">Budgets</div>
+          <h3 id="budgetCount">0</h3>
+          <p class="subtext">Loaded limits</p>
+        </article>
+      </section>
+
+      <section class="content-grid lower-grid">
+        <article class="panel-card glass-surface" id="usersCard">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Users</p>
+              <h2>All users</h2>
+            </div>
+            <button id="loadUsersButton" class="ghost-button" type="button">Load users</button>
+          </div>
+
+          <div class="table-wrap admin-table-wrap">
+            <table class="admin-table" id="usersTable">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Username</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="usersBody">
+                <tr><td colspan="5" class="empty-cell">No users loaded yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel-card glass-surface" id="categoriesCard">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Categories</p>
+              <h2>Manage categories</h2>
+            </div>
+          </div>
+
+          <form id="categoryCreateForm" class="admin-inline-form">
+            <label class="field-label compact-label" for="newCategoryName">New category</label>
+            <div class="inline-field">
+              <input id="newCategoryName" name="name" type="text" placeholder="Transport" autocomplete="off" />
+              <button id="addCategoryBtn" class="primary-button" type="submit">Add</button>
+            </div>
+          </form>
+
+          <div class="table-wrap admin-table-wrap">
+            <table class="admin-table" id="categoriesTable">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Created By</th>
+                  <th>Default</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="categoriesBody">
+                <tr><td colspan="5" class="empty-cell">No categories loaded yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="content-grid lower-grid">
+        <article class="panel-card glass-surface" id="expensesCard">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Expenses</p>
+              <h2>All expenses</h2>
+            </div>
+            <button id="loadExpensesBtn" class="ghost-button" type="button">Load expenses</button>
+          </div>
+
+          <div class="table-wrap admin-table-wrap tall-table">
+            <table class="admin-table" id="expensesTable">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>User</th>
+                  <th>Date</th>
+                  <th>Category</th>
+                  <th>Amount</th>
+                  <th>Notes</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="expensesBody">
+                <tr><td colspan="7" class="empty-cell">No expenses loaded yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel-card glass-surface" id="budgetsCard">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Budgets</p>
+              <h2>All budgets</h2>
+            </div>
+            <button id="loadBudgetsBtn" class="ghost-button" type="button">Load budgets</button>
+          </div>
+
+          <div class="table-wrap admin-table-wrap">
+            <table class="admin-table" id="budgetsTable">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>User</th>
+                  <th>Category</th>
+                  <th>Limit</th>
+                  <th>Period</th>
+                  <th>Start</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="budgetsBody">
+                <tr><td colspan="7" class="empty-cell">No budgets loaded yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="workspace-section glass-surface" id="reportsCard">
+        <div class="section-head workspace-head">
+          <div>
+            <p class="eyebrow">Reports</p>
+            <h2>All reports</h2>
+            <p class="subtext">Load generated reports and remove stale records when needed.</p>
+          </div>
+          <button id="loadReportsBtn" class="ghost-button" type="button">Load reports</button>
+        </div>
+
+        <div class="table-wrap admin-table-wrap">
+          <table class="admin-table" id="reportsTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>User</th>
+                <th>Type</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Generated At</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="reportsBody">
+              <tr><td colspan="7" class="empty-cell">No reports loaded yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    let currentAdminUserId = null;
+
+    const baseUrl = () => localStorage.getItem('financer_base_url') || 'http://127.0.0.1:5000';
+    const getSession = () => JSON.parse(localStorage.getItem('financer_session') || '{}');
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      })[char]);
+    }
+
+    function setCount(id, value) {
+      document.getElementById(id).textContent = Array.isArray(value) ? value.length : 0;
+    }
+
+    function setEmpty(tbodyId, colspan, message) {
+      document.getElementById(tbodyId).innerHTML = `<tr><td colspan="${colspan}" class="empty-cell">${message}</td></tr>`;
+    }
+
+    async function syncRoleFromBackend() {
+      const session = getSession();
+      if (!session.user_id) {
+        alert('Session expired. Please login again.');
+        window.location.href = 'index.html';
+        return;
+      }
+
+      try {
+        const response = await fetch(`${baseUrl()}/user/${session.user_id}`);
+        const result = await response.json();
+
+        if (response.ok && result.user) {
+          session.role = result.user.role;
+          session.username = result.user.username || session.username;
+          localStorage.setItem('financer_session', JSON.stringify(session));
+          updateAdminPanel();
+        } else {
+          document.getElementById('adminSubtext').textContent = result.message || 'Could not confirm your role.';
+        }
+      } catch (error) {
+        console.error('Error syncing role:', error);
+        document.getElementById('adminSubtext').textContent = 'Could not reach the backend to confirm your role.';
+      }
+    }
+
+    function updateAdminPanel() {
+      const session = getSession();
+      const badge = document.getElementById('adminBadge');
+      const roleText = document.getElementById('adminRoleText');
+      const sessionBadge = document.getElementById('sessionBadge');
+
+      if (session.role === 'admin') {
+        currentAdminUserId = session.user_id;
+        badge.textContent = `admin - ${session.username || 'Admin'}`;
+        roleText.textContent = `User ID: ${session.user_id}`;
+        sessionBadge.textContent = 'Admin mode';
+        document.getElementById('adminHeading').textContent = 'Management Console';
+        document.getElementById('adminSubtext').textContent = 'Review and modify site data from one role-aware workspace.';
+        loadAdminOverview();
+      } else {
+        currentAdminUserId = null;
+        badge.textContent = `${session.role || 'guest'} - ${session.username || 'User'}`;
+        roleText.textContent = 'This account does not have admin access.';
+        sessionBadge.textContent = 'Access required';
+        document.getElementById('adminHeading').textContent = 'Access required';
+        document.getElementById('adminSubtext').textContent = 'Sign in as an admin from the dashboard, then sync your role.';
+      }
+    }
+
+    async function loadAdminOverview() {
+      await Promise.all([loadUsers(), loadCategories(), loadExpenses(), loadBudgets(), loadReports()]);
+    }
+
+    async function loadUsers() {
+      if (!currentAdminUserId) return;
+      try {
+        const response = await fetch(`${baseUrl()}/admin/users?admin_user_id=${currentAdminUserId}`);
+        const users = await response.json();
+        const tbody = document.getElementById('usersBody');
+        setCount('userCount', users);
+
+        if (Array.isArray(users) && users.length) {
+          tbody.innerHTML = users.map(user => `
+            <tr>
+              <td>#${escapeHtml(user.user_id)}</td>
+              <td>${escapeHtml(user.username)}</td>
+              <td>${escapeHtml(user.email)}</td>
+              <td><span class="status-badge status-${escapeHtml(user.role)}">${escapeHtml(user.role)}</span></td>
+              <td class="admin-table-actions">
+                <button class="admin-btn" type="button" data-admin-action="edit-user-role" data-user-id="${escapeHtml(user.user_id)}" data-username="${escapeHtml(user.username)}" data-role="${escapeHtml(user.role)}">Edit</button>
+                <button class="admin-btn admin-btn-danger" type="button" data-admin-action="delete-user" data-user-id="${escapeHtml(user.user_id)}" data-username="${escapeHtml(user.username)}">Delete</button>
+              </td>
+            </tr>
+          `).join('');
+        } else {
+          setEmpty('usersBody', 5, 'No users found.');
+        }
+      } catch (error) {
+        console.error(error);
+        setEmpty('usersBody', 5, 'Unable to load users.');
+      }
+    }
+
+    async function loadCategories() {
+      if (!currentAdminUserId) return;
+      try {
+        const response = await fetch(`${baseUrl()}/admin/categories?admin_user_id=${currentAdminUserId}`);
+        const categories = await response.json();
+        const tbody = document.getElementById('categoriesBody');
+        setCount('categoryCount', categories);
+
+        if (Array.isArray(categories) && categories.length) {
+          tbody.innerHTML = categories.map(category => `
+            <tr>
+              <td>#${escapeHtml(category.category_id)}</td>
+              <td>${escapeHtml(category.name)}</td>
+              <td>${category.created_by ? '#' + escapeHtml(category.created_by) : 'System'}</td>
+              <td>${category.is_default ? '<span class="pill success">Yes</span>' : '<span class="pill">No</span>'}</td>
+              <td class="admin-table-actions">
+                <button class="admin-btn" type="button" data-admin-action="edit-category" data-category-id="${escapeHtml(category.category_id)}" data-category-name="${escapeHtml(category.name)}">Edit</button>
+                <button class="admin-btn admin-btn-danger" type="button" data-admin-action="delete-category" data-category-id="${escapeHtml(category.category_id)}" data-category-name="${escapeHtml(category.name)}">Delete</button>
+              </td>
+            </tr>
+          `).join('');
+        } else {
+          setEmpty('categoriesBody', 5, 'No categories found.');
+        }
+      } catch (error) {
+        console.error('Error loading categories:', error);
+        setEmpty('categoriesBody', 5, 'Unable to load categories.');
+      }
+    }
+
+    async function addCategory(event) {
+      event.preventDefault();
+      const name = document.getElementById('newCategoryName').value.trim();
+      if (!name) {
+        alert('Enter a category name');
+        return;
+      }
+
+      const session = getSession();
+      try {
+        const response = await fetch(`${baseUrl()}/add-category`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, user_id: session.user_id })
+        });
+        const result = await response.json();
+
+        if (response.ok) {
+          document.getElementById('newCategoryName').value = '';
+          loadCategories();
+        } else {
+          alert('Error: ' + (result.message || 'Failed to add category'));
+        }
+      } catch (error) {
+        console.error(error);
+        alert('Failed to add category');
+      }
+    }
+
+    async function deleteCategory(categoryId, name) {
+      if (!confirm(`Delete category "${name}"?`)) return;
+      try {
+        const response = await fetch(`${baseUrl()}/admin/categories/${categoryId}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ admin_user_id: currentAdminUserId })
+        });
+        const result = await response.json();
+        if (response.ok) {
+          loadCategories();
+        } else {
+          alert('Error: ' + (result.message || 'Failed to delete category'));
+        }
+      } catch (error) {
+        console.error(error);
+        alert('Failed to delete category');
+      }
+    }
+
+    async function editCategory(categoryId, name) {
+      const newName = prompt('New category name:', name);
+      if (newName === null) return;
+      const makeDefault = confirm('Mark as default/global? OK = yes.');
+
+      try {
+        const response = await fetch(`${baseUrl()}/admin/categories/${categoryId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ admin_user_id: currentAdminUserId, name: newName, is_default: makeDefault })
+        });
+        const result = await response.json();
+        if (response.ok) {
+          loadCategories();
+        } else {
+          alert('Error: ' + (result.message || 'Failed to update category'));
+        }
+      } catch (error) {
+        console.error(error);
+        alert('Failed to update category');
+      }
+    }
+
+    function openRoleModal(userId, username, currentRole) {
+      const newRole = prompt(`Set new role for ${username} (basic/premium/admin):`, currentRole);
+      if (!newRole) return;
+      updateUserRole(userId, newRole);
+    }
+
+    async function updateUserRole(userId, newRole) {
+      try {
+        const response = await fetch(`${baseUrl()}/admin/users/${userId}/role`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ admin_user_id: currentAdminUserId, role: newRole })
+        });
+        const result = await response.json();
+        if (response.ok) {
+          loadUsers();
+        } else {
+          alert('Error: ' + (result.message || 'Failed to update role'));
+        }
+      } catch (error) {
+        console.error(error);
+        alert('Failed to update role');
+      }
+    }
+
+    async function deleteUser(userId, username) {
+      if (!confirm(`Delete user ${username}?`)) return;
+      try {
+        const response = await fetch(`${baseUrl()}/admin/users/${userId}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ admin_user_id: currentAdminUserId })
+        });
+        const result = await response.json();
+        if (response.ok) {
+          loadUsers();
+        } else {
+          alert('Error: ' + (result.message || 'Failed to delete user'));
+        }
+      } catch (error) {
+        console.error(error);
+        alert('Failed to delete user');
+      }
+    }
+
+    async function loadExpenses() {
+      if (!currentAdminUserId) return;
+      try {
+        const response = await fetch(`${baseUrl()}/admin/expenses?admin_user_id=${currentAdminUserId}`);
+        const expenses = await response.json();
+        const tbody = document.getElementById('expensesBody');
+        setCount('expenseCount', expenses);
+
+        if (Array.isArray(expenses) && expenses.length) {
+          tbody.innerHTML = expenses.map(expense => `
+            <tr>
+              <td>#${escapeHtml(expense.expense_id)}</td>
+              <td>#${escapeHtml(expense.user_id)}</td>
+              <td>${escapeHtml(expense.expense_date)}</td>
+              <td>${escapeHtml(expense.category_id)}</td>
+              <td>${escapeHtml(expense.amount)}</td>
+              <td>${escapeHtml(expense.notes || '-')}</td>
+              <td class="admin-table-actions"><button class="admin-btn admin-btn-danger" type="button" data-admin-action="delete-expense" data-expense-id="${escapeHtml(expense.expense_id)}">Delete</button></td>
+            </tr>
+          `).join('');
+        } else {
+          setEmpty('expensesBody', 7, 'No expenses found.');
+        }
+      } catch (error) {
+        console.error(error);
+        setEmpty('expensesBody', 7, 'Unable to load expenses.');
+      }
+    }
+
+    async function adminDeleteExpense(expenseId) {
+      if (!confirm('Delete expense #' + expenseId + '?')) return;
+      try {
+        const response = await fetch(`${baseUrl()}/admin/expenses/${expenseId}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ admin_user_id: currentAdminUserId })
+        });
+        const result = await response.json();
+        if (response.ok) {
+          loadExpenses();
+        } else {
+          alert('Error: ' + (result.message || 'Failed to delete expense'));
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    async function loadBudgets() {
+      if (!currentAdminUserId) return;
+      try {
+        const response = await fetch(`${baseUrl()}/admin/budgets?admin_user_id=${currentAdminUserId}`);
+        const budgets = await response.json();
+        const tbody = document.getElementById('budgetsBody');
+        setCount('budgetCount', budgets);
+
+        if (Array.isArray(budgets) && budgets.length) {
+          tbody.innerHTML = budgets.map(budget => `
+            <tr>
+              <td>#${escapeHtml(budget.budget_id)}</td>
+              <td>#${escapeHtml(budget.user_id)}</td>
+              <td>${escapeHtml(budget.category_id)}</td>
+              <td>${escapeHtml(budget.amount_limit)}</td>
+              <td>${escapeHtml(budget.period)}</td>
+              <td>${escapeHtml(budget.start_date)}</td>
+              <td class="admin-table-actions"><button class="admin-btn admin-btn-danger" type="button" data-admin-action="delete-budget" data-budget-id="${escapeHtml(budget.budget_id)}">Delete</button></td>
+            </tr>
+          `).join('');
+        } else {
+          setEmpty('budgetsBody', 7, 'No budgets found.');
+        }
+      } catch (error) {
+        console.error(error);
+        setEmpty('budgetsBody', 7, 'Unable to load budgets.');
+      }
+    }
+
+    async function adminDeleteBudget(budgetId) {
+      if (!confirm('Delete budget #' + budgetId + '?')) return;
+      try {
+        const response = await fetch(`${baseUrl()}/admin/budgets/${budgetId}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ admin_user_id: currentAdminUserId })
+        });
+        const result = await response.json();
+        if (response.ok) {
+          loadBudgets();
+        } else {
+          alert('Error: ' + (result.message || 'Failed to delete budget'));
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    async function loadReports() {
+      if (!currentAdminUserId) return;
+      try {
+        const response = await fetch(`${baseUrl()}/admin/reports?admin_user_id=${currentAdminUserId}`);
+        const reports = await response.json();
+        const tbody = document.getElementById('reportsBody');
+
+        if (Array.isArray(reports) && reports.length) {
+          tbody.innerHTML = reports.map(report => `
+            <tr>
+              <td>#${escapeHtml(report.report_id)}</td>
+              <td>#${escapeHtml(report.user_id)}</td>
+              <td>${escapeHtml(report.report_type)}</td>
+              <td>${escapeHtml(report.date_from)}</td>
+              <td>${escapeHtml(report.date_to)}</td>
+              <td>${escapeHtml(report.generated_at || '-')}</td>
+              <td class="admin-table-actions"><button class="admin-btn admin-btn-danger" type="button" data-admin-action="delete-report" data-report-id="${escapeHtml(report.report_id)}">Delete</button></td>
+            </tr>
+          `).join('');
+        } else {
+          setEmpty('reportsBody', 7, 'No reports found.');
+        }
+      } catch (error) {
+        console.error(error);
+        setEmpty('reportsBody', 7, 'Unable to load reports.');
+      }
+    }
+
+    async function adminDeleteReport(reportId) {
+      if (!confirm('Delete report #' + reportId + '?')) return;
+      try {
+        const response = await fetch(`${baseUrl()}/admin/reports/${reportId}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ admin_user_id: currentAdminUserId })
+        });
+        const result = await response.json();
+        if (response.ok) {
+          loadReports();
+        } else {
+          alert('Error: ' + (result.message || 'Failed to delete report'));
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    function logout() {
+      if (confirm('Logout?')) {
+        localStorage.removeItem('financer_session');
+        window.location.href = 'index.html';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('syncRoleBtn').addEventListener('click', syncRoleFromBackend);
+      document.getElementById('dashboardButton').addEventListener('click', () => window.location.href = 'index.html');
+      document.getElementById('logoutButton').addEventListener('click', logout);
+      document.getElementById('refreshAdminButton').addEventListener('click', loadAdminOverview);
+      document.getElementById('loadUsersButton').addEventListener('click', loadUsers);
+      document.getElementById('categoryCreateForm').addEventListener('submit', addCategory);
+      document.getElementById('loadExpensesBtn').addEventListener('click', loadExpenses);
+      document.getElementById('loadBudgetsBtn').addEventListener('click', loadBudgets);
+      document.getElementById('loadReportsBtn').addEventListener('click', loadReports);
+
+      document.querySelectorAll('[data-admin-target]').forEach(button => {
+        button.addEventListener('click', () => {
+          const target = document.getElementById(button.dataset.adminTarget);
+          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      });
+
+      document.addEventListener('click', event => {
+        const button = event.target.closest('[data-admin-action]');
+        if (!button) return;
+
+        if (button.dataset.adminAction === 'edit-user-role') {
+          openRoleModal(Number(button.dataset.userId), button.dataset.username, button.dataset.role);
+        }
+        if (button.dataset.adminAction === 'delete-user') {
+          deleteUser(Number(button.dataset.userId), button.dataset.username);
+        }
+        if (button.dataset.adminAction === 'edit-category') {
+          editCategory(Number(button.dataset.categoryId), button.dataset.categoryName);
+        }
+        if (button.dataset.adminAction === 'delete-category') {
+          deleteCategory(Number(button.dataset.categoryId), button.dataset.categoryName);
+        }
+        if (button.dataset.adminAction === 'delete-expense') {
+          adminDeleteExpense(Number(button.dataset.expenseId));
+        }
+        if (button.dataset.adminAction === 'delete-budget') {
+          adminDeleteBudget(Number(button.dataset.budgetId));
+        }
+        if (button.dataset.adminAction === 'delete-report') {
+          adminDeleteReport(Number(button.dataset.reportId));
+        }
+      });
+
+      syncRoleFromBackend();
+    });
+  </script>
+</body>
+</html>
