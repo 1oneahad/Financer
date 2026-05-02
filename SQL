@@ -1,0 +1,136 @@
+--SCHEMA
+CREATE TABLE users (
+    user_id     BIGSERIAL PRIMARY KEY,
+    username    TEXT NOT NULL UNIQUE,
+    email       TEXT NOT NULL UNIQUE,
+    password    TEXT NOT NULL,
+    role        TEXT NOT NULL DEFAULT 'basic' CHECK (role IN ('basic', 'premium', 'admin')),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE categories (
+    category_id  BIGSERIAL PRIMARY KEY,
+    name         TEXT NOT NULL,
+    description  TEXT,
+    is_default   BOOLEAN NOT NULL DEFAULT FALSE,
+    created_by   BIGINT REFERENCES users (user_id) ON DELETE SET NULL
+);
+
+CREATE TABLE expenses (
+    expense_id   BIGSERIAL PRIMARY KEY,
+    user_id      BIGINT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+    category_id  BIGINT NOT NULL REFERENCES categories (category_id) ON DELETE RESTRICT,
+    amount       NUMERIC(10, 2) NOT NULL CHECK (amount > 0),
+    expense_date DATE NOT NULL,
+    notes        TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DROP TABLE budgets;
+
+CREATE TABLE budgets (
+    budget_id    BIGSERIAL PRIMARY KEY,
+    user_id      BIGINT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+    category_id  BIGINT NOT NULL REFERENCES categories (category_id) ON DELETE CASCADE,
+    amount_limit NUMERIC(10, 2) NOT NULL CHECK (amount_limit > 0),
+    start_date   DATE NOT NULL,
+    end_date     DATE NOT NULL,
+    CHECK (start_date < end_date)
+);
+
+CREATE TABLE reports (
+    report_id    BIGSERIAL PRIMARY KEY,
+    user_id      BIGINT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+    report_type  TEXT NOT NULL CHECK (report_type IN ('monthly_summary', '30_days', 'date_range')),
+    date_from    DATE NOT NULL,
+    date_to      DATE NOT NULL,
+    generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (date_from <= date_to)
+);
+
+CREATE TABLE audit_log (
+    log_id       BIGSERIAL PRIMARY KEY,
+    user_id      BIGINT REFERENCES users (user_id) ON DELETE SET NULL,
+    action       TEXT NOT NULL CHECK (action IN ('INSERT', 'UPDATE', 'DELETE')),
+    target_table TEXT NOT NULL,
+    target_id    BIGINT NOT NULL,
+    action_time  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO categories (name, description, is_default, created_by) VALUES
+    ('Food & Dining',     'Restaurants, groceries, and food delivery', TRUE, NULL),
+    ('Transport',         'Fuel, fares, and vehicle expenses',          TRUE, NULL),
+    ('Utilities',         'Electricity, water, gas, and internet',      TRUE, NULL),
+    ('Health',            'Medical, pharmacy, and fitness',             TRUE, NULL),
+    ('Entertainment',     'Movies, games, and leisure activities',      TRUE, NULL),
+    ('Shopping',          'Clothing, electronics, and general retail',  TRUE, NULL),
+    ('Education',         'Tuition, books, and courses',                TRUE, NULL),
+    ('Other',             'Miscellaneous expenses',                     TRUE, NULL);
+
+--FUNCTIONS
+CREATE OR REPLACE FUNCTION auto_log_fn()
+RETURNS trigger
+AS $$
+BEGIN
+  INSERT INTO audit_log(user_id, action, target_table, target_id)
+  VALUES (
+    COALESCE(NEW.user_id, OLD.user_id),
+    TG_OP,
+    TG_TABLE_NAME,
+    COALESCE(OLD.user_id, NEW.user_id)
+  );
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+--TRIGGERS
+CREATE TRIGGER auto_log
+AFTER INSERT OR UPDATE OR DELETE ON users
+FOR EACH ROW
+EXECUTE FUNCTION auto_log_fn();
+
+CREATE TRIGGER auto_log
+AFTER INSERT OR UPDATE OR DELETE ON expenses
+FOR EACH ROW
+EXECUTE FUNCTION auto_log_fn();
+
+CREATE TRIGGER auto_log
+AFTER INSERT OR UPDATE OR DELETE ON budgets
+FOR EACH ROW
+EXECUTE FUNCTION auto_log_fn();
+
+--VIEWS
+create view spent_by_category as(
+  select u.user_id, u.username, e.category_id, c.name, sum(e.amount) AS total_spent from users u
+  join expenses e on e.user_id = u.user_id
+  join categories c on c.category_id = e.category_id
+  group by u.user_id, u.username, e.category_id, c.name
+);
+
+create view total_spent_monthly as(
+  select u.user_id, u.username, sum(e.amount) AS spent_monthly from users u
+  join expenses e on e.user_id = u.user_id
+  group by u.user_id, u.username, date_trunc('month', e.expense_date)
+);
+
+CREATE VIEW budget_vs_actual AS
+SELECT u.user_id, u.username, c.category_id, c.name,
+       SUM(e.amount) AS total_spent,
+       b.budget_id, b.amount_limit, b.start_date, b.end_date
+FROM users u
+JOIN expenses e ON e.user_id = u.user_id
+JOIN categories c ON c.category_id = e.category_id
+JOIN budgets b ON b.user_id = u.user_id AND b.category_id = c.category_id
+WHERE e.expense_date >= b.start_date AND e.expense_date <= b.end_date
+GROUP BY u.user_id, u.username, c.category_id, c.name, 
+         b.budget_id, b.amount_limit, b.start_date, b.end_date;
+
+--select * from recent_transactions where user_id = user_id (in flask)
+CREATE VIEW recent_transactions AS
+SELECT u.user_id, u.username, c.name AS category, 
+       e.amount, e.expense_date, e.notes
+FROM users u
+JOIN expenses e ON e.user_id = u.user_id
+JOIN categories c ON c.category_id = e.category_id
+ORDER BY e.expense_date DESC;
