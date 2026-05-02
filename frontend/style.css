@@ -34,12 +34,19 @@ body {
   margin: 0;
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--text);
+  --spiral-bg: url("ttten.svg");
+  --spiral-opacity: 0.5;
   background:
     radial-gradient(circle at 12% 18%, rgba(56, 189, 248, 0.16), transparent 24%),
     radial-gradient(circle at 88% 12%, rgba(20, 184, 166, 0.12), transparent 22%),
     radial-gradient(circle at 78% 84%, rgba(245, 158, 11, 0.10), transparent 28%),
     linear-gradient(145deg, var(--bg-0) 0%, var(--bg-1) 45%, #070b14 100%);
   background-attachment: fixed;
+}
+
+body.admin-page {
+  --spiral-bg: url("admin-ttten.svg");
+  --spiral-opacity: 1;
 }
 
 body::before {
@@ -53,6 +60,18 @@ body::before {
   background-size: 56px 56px;
   mask-image: radial-gradient(circle at center, black 45%, transparent 88%);
   opacity: 0.45;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--spiral-bg);
+  background-repeat: no-repeat;
+  background-position: center top;
+  background-size: max(1422px, 100vw) auto;
+  opacity: var(--spiral-opacity);
 }
 
 .page-glow {
@@ -102,8 +121,8 @@ body::before {
 .glass-surface {
   background: var(--surface);
   border: 1px solid var(--border);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   box-shadow: var(--shadow);
 }
 
