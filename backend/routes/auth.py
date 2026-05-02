@@ -119,3 +119,26 @@ def login():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@auth_routes.route('/user/<int:user_id>', methods=['GET'])
+def get_user(user_id):
+    """Fetch current user data from database (for role syncing)."""
+    try:
+        response = supabase.table("users") \
+            .select("user_id, username, email, role, created_at") \
+            .eq("user_id", user_id) \
+            .limit(1) \
+            .execute()
+
+        if not response.data:
+            return jsonify({"message": "User not found"}), 404
+
+        user = response.data[0]
+        return jsonify({
+            "message": "User found",
+            "user": user
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
