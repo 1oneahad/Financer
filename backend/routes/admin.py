@@ -315,8 +315,12 @@ def update_user_role(user_id):
         return jsonify({"message": "user_id must be a positive integer"}), 400
 
     role = data.get("role")
+    role = role.strip().lower() if isinstance(role, str) else role
     if role not in VALID_ROLES:
         return jsonify({"message": "role must be basic, premium, or admin"}), 400
+
+    if int(user_id) == int(admin_user_id) and role != "admin":
+        return jsonify({"message": "You cannot remove your own admin role while logged in."}), 400
 
     existing = supabase.table("users") \
         .select("user_id, username, email, role") \
