@@ -118,20 +118,24 @@ def get_budgets(user_id):
 @budget_routes.route("/update-budget/<budget_id>", methods=["PUT"])
 def update_budget(budget_id):
     data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
 
     if not is_positive_int(budget_id):
         return jsonify({"message": "budget_id must be a positive integer"}), 400
+    if not is_positive_int(user_id):
+        return jsonify({"message": "user_id must be a positive integer"}), 400
 
-    existing = None
-    if "period" in data or "start_date" in data:
-        existing = supabase.table("budgets") \
-            .select("*") \
-            .eq("budget_id", budget_id) \
-            .limit(1) \
-            .execute()
+    existing = supabase.table("budgets") \
+        .select("*") \
+        .eq("budget_id", budget_id) \
+        .limit(1) \
+        .execute()
 
-        if not existing.data:
-            return jsonify({"message": "Budget not found"}), 404
+    if not existing.data:
+        return jsonify({"message": "Budget not found"}), 404
+
+    if int(existing.data[0].get("user_id")) != int(user_id):
+        return jsonify({"message": "You can only update your own budgets"}), 403
 
     updates = {}
     period = data.get("period")
@@ -172,8 +176,7 @@ def update_budget(budget_id):
         .execute()
 
     updated_budget = normalize_budget_row(response.data[0]) if response.data else {}
-    audit_user_id = data.get("user_id", updated_budget.get("user_id"))
-    log_audit_action(audit_user_id, "UPDATE", "budgets", budget_id)
+    log_audit_action(user_id, "UPDATE", "budgets", budget_id)
 
     return jsonify({
         "message": "Budget updated",
@@ -184,9 +187,12 @@ def update_budget(budget_id):
 @budget_routes.route("/delete-budget/<budget_id>", methods=["DELETE"])
 def delete_budget(budget_id):
     data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
 
     if not is_positive_int(budget_id):
         return jsonify({"message": "budget_id must be a positive integer"}), 400
+    if not is_positive_int(user_id):
+        return jsonify({"message": "user_id must be a positive integer"}), 400
 
     existing = supabase.table("budgets") \
         .select("*") \
@@ -197,14 +203,16 @@ def delete_budget(budget_id):
     if not existing.data:
         return jsonify({"message": "Budget not found"}), 404
 
+    deleted_budget = existing.data[0]
+    if int(deleted_budget.get("user_id")) != int(user_id):
+        return jsonify({"message": "You can only delete your own budgets"}), 403
+
     response = supabase.table("budgets") \
         .delete() \
         .eq("budget_id", budget_id) \
         .execute()
 
-    deleted_budget = existing.data[0]
-    audit_user_id = data.get("user_id", deleted_budget.get("user_id"))
-    log_audit_action(audit_user_id, "DELETE", "budgets", budget_id)
+    log_audit_action(user_id, "DELETE", "budgets", budget_id)
 
     return jsonify({
         "message": "Budget deleted",

@@ -79,12 +79,34 @@ def add_category():
 @category_routes.route("/update-category/<category_id>", methods=["PUT"])
 def update_category(category_id):
     data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
 
     if not is_positive_int(category_id):
         return jsonify({"message": "category_id must be a positive integer"}), 400
+    if not is_positive_int(user_id):
+        return jsonify({"message": "user_id must be a positive integer"}), 400
+
+    role = _get_user_role(user_id)
+    if role not in ("premium", "admin"):
+        return jsonify({"message": "premium access required to update categories"}), 403
+
+    existing = supabase.table("categories") \
+        .select("*") \
+        .eq("category_id", category_id) \
+        .limit(1) \
+        .execute()
+
+    if not existing.data:
+        return jsonify({"message": "Category not found"}), 404
+
+    category = existing.data[0]
+    if category.get("is_default"):
+        return jsonify({"message": "System categories cannot be edited here"}), 403
+    if int(category.get("created_by") or 0) != int(user_id):
+        return jsonify({"message": "You can only update your own categories"}), 403
 
     updates = {}
-    for key in ("name", "description", "is_default"):
+    for key in ("name", "description"):
         if key in data:
             if key == "name" and isinstance(data.get("name"), str):
                 value = data.get("name").strip()
@@ -102,9 +124,7 @@ def update_category(category_id):
         .eq("category_id", category_id) \
         .execute()
 
-    updated = response.data[0] if response.data else {}
-    audit_user_id = data.get("user_id", updated.get("created_by"))
-    log_audit_action(audit_user_id, "UPDATE", "categories", category_id)
+    log_audit_action(user_id, "UPDATE", "categories", category_id)
 
     return jsonify({
         "message": "Category updated",
@@ -115,9 +135,16 @@ def update_category(category_id):
 @category_routes.route("/delete-category/<category_id>", methods=["DELETE"])
 def delete_category(category_id):
     data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
 
     if not is_positive_int(category_id):
         return jsonify({"message": "category_id must be a positive integer"}), 400
+    if not is_positive_int(user_id):
+        return jsonify({"message": "user_id must be a positive integer"}), 400
+
+    role = _get_user_role(user_id)
+    if role not in ("premium", "admin"):
+        return jsonify({"message": "premium access required to delete categories"}), 403
 
     existing = supabase.table("categories") \
         .select("*") \
@@ -128,14 +155,18 @@ def delete_category(category_id):
     if not existing.data:
         return jsonify({"message": "Category not found"}), 404
 
+    deleted = existing.data[0]
+    if deleted.get("is_default"):
+        return jsonify({"message": "System categories cannot be deleted here"}), 403
+    if int(deleted.get("created_by") or 0) != int(user_id):
+        return jsonify({"message": "You can only delete your own categories"}), 403
+
     response = supabase.table("categories") \
         .delete() \
         .eq("category_id", category_id) \
         .execute()
 
-    deleted = existing.data[0]
-    audit_user_id = data.get("user_id", deleted.get("created_by"))
-    log_audit_action(audit_user_id, "DELETE", "categories", category_id)
+    log_audit_action(user_id, "DELETE", "categories", category_id)
 
     return jsonify({
         "message": "Category deleted",

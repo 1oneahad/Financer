@@ -53,12 +53,22 @@ const categoryForm = document.getElementById("categoryForm");
 const loadCategoriesButton = document.getElementById("loadCategoriesButton");
 const categoryMessage = document.getElementById("categoryMessage");
 const categoriesBody = document.getElementById("categoriesBody");
+const recordModal = document.getElementById("recordModal");
+const recordModalEyebrow = document.getElementById("recordModalEyebrow");
+const recordModalTitle = document.getElementById("recordModalTitle");
+const recordModalClose = document.getElementById("recordModalClose");
+const recordModalForm = document.getElementById("recordModalForm");
+const recordModalMessage = document.getElementById("recordModalMessage");
 
 const colors = ["#38bdf8", "#14b8a6", "#f59e0b", "#818cf8", "#fb7185", "#22c55e", "#a855f7", "#06b6d4"];
 
 const state = {
   baseUrl: localStorage.getItem("financer_base_url") || "http://127.0.0.1:5000",
   session: loadSession(),
+  expenses: [],
+  budgets: [],
+  categories: [],
+  activeModal: null,
 };
 
 function loadSession() {
@@ -163,6 +173,120 @@ function setCategoryMessage(text, isError = false) {
 
 function setWorkspaceNavMessage(text, isError = false) {
   requestMessage(workspaceNavMessage, text, isError);
+}
+
+function setModalMessage(text, isError = false) {
+  requestMessage(recordModalMessage, text, isError);
+}
+
+function categoryName(categoryId) {
+  const match = state.categories.find((category) => Number(category.category_id) === Number(categoryId));
+  return match?.name || `Category ${categoryId}`;
+}
+
+function categoryOptions(selectedId) {
+  const options = state.categories.map((category) => `
+    <option value="${category.category_id}" ${Number(category.category_id) === Number(selectedId) ? "selected" : ""}>${escapeHtml(category.name)}</option>
+  `).join("");
+
+  return `<option value="">Choose a category</option>${options}`;
+}
+
+function closeRecordModal() {
+  state.activeModal = null;
+  recordModal.classList.add("hidden");
+  recordModalForm.innerHTML = "";
+  setModalMessage("");
+}
+
+function openRecordModal({ type, mode, item }) {
+  state.activeModal = { type, mode, item };
+  recordModalEyebrow.textContent = mode === "delete" ? "Delete" : "Edit";
+  recordModalTitle.textContent = `${mode === "delete" ? "Delete" : "Edit"} ${type}`;
+  setModalMessage("");
+
+  if (mode === "delete") {
+    const label = type === "expense"
+      ? `${escapeHtml(item.expense_date)} - ${money(item.amount)}`
+      : type === "budget"
+        ? `${escapeHtml(categoryName(item.category_id))} - ${money(item.amount_limit)}`
+        : escapeHtml(item.name);
+    const id = type === "expense" ? item.expense_id : type === "budget" ? item.budget_id : item.category_id;
+    recordModalForm.innerHTML = `
+      <p class="subtext">This will remove ${type} #${id}: <strong>${label}</strong>.</p>
+      <div class="modal-actions">
+        <button class="ghost-button" type="button" data-modal-close>Cancel</button>
+        <button class="danger-button" type="submit">Delete ${type}</button>
+      </div>
+    `;
+  } else if (type === "expense") {
+    recordModalForm.innerHTML = `
+      <label>
+        Category
+        <select name="category_id" required>${categoryOptions(item.category_id)}</select>
+      </label>
+      <label>
+        Amount
+        <input name="amount" type="number" min="0.01" step="0.01" value="${escapeHtml(item.amount)}" required />
+      </label>
+      <label>
+        Date
+        <input name="expense_date" type="date" value="${escapeHtml(item.expense_date)}" required />
+      </label>
+      <label>
+        Notes
+        <textarea name="notes" rows="3">${escapeHtml(item.notes || "")}</textarea>
+      </label>
+      <div class="modal-actions">
+        <button class="ghost-button" type="button" data-modal-close>Cancel</button>
+        <button class="primary-button" type="submit">Save expense</button>
+      </div>
+    `;
+  } else if (type === "budget") {
+    recordModalForm.innerHTML = `
+      <label>
+        Category
+        <select name="category_id" required>${categoryOptions(item.category_id)}</select>
+      </label>
+      <label>
+        Limit
+        <input name="amount_limit" type="number" min="0.01" step="0.01" value="${escapeHtml(item.amount_limit)}" required />
+      </label>
+      <label>
+        Period
+        <select name="period" required>
+          <option value="weekly" ${item.period === "weekly" ? "selected" : ""}>weekly</option>
+          <option value="monthly" ${item.period === "monthly" ? "selected" : ""}>monthly</option>
+        </select>
+      </label>
+      <label>
+        Start date
+        <input name="start_date" type="date" value="${escapeHtml(item.start_date)}" required />
+      </label>
+      <div class="modal-actions">
+        <button class="ghost-button" type="button" data-modal-close>Cancel</button>
+        <button class="primary-button" type="submit">Save budget</button>
+      </div>
+    `;
+  } else {
+    recordModalForm.innerHTML = `
+      <label>
+        Name
+        <input name="name" type="text" value="${escapeHtml(item.name)}" required />
+      </label>
+      <label>
+        Description
+        <input name="description" type="text" value="${escapeHtml(item.description || "")}" />
+      </label>
+      <div class="modal-actions">
+        <button class="ghost-button" type="button" data-modal-close>Cancel</button>
+        <button class="primary-button" type="submit">Save category</button>
+      </div>
+    `;
+  }
+
+  recordModal.classList.remove("hidden");
+  recordModalForm.querySelector("input, select, textarea, button")?.focus();
 }
 
 function setAuthTab(tab) {
@@ -367,14 +491,20 @@ function renderExpensesRows(items) {
     expensesBody,
     items,
     "No expenses loaded yet.",
-    5,
+    6,
     (item) => `
       <tr>
         <td>${item.expense_id}</td>
         <td>${escapeHtml(item.expense_date)}</td>
-        <td>${escapeHtml(item.category_id ?? "-")}</td>
+        <td>${escapeHtml(categoryName(item.category_id))}</td>
         <td>${money(item.amount)}</td>
         <td>${escapeHtml(item.notes || "-")}</td>
+        <td>
+          <div class="row-actions">
+            <button class="admin-btn" type="button" data-record-action="edit-expense" data-expense-id="${escapeHtml(item.expense_id)}">Edit</button>
+            <button class="admin-btn admin-btn-danger" type="button" data-record-action="delete-expense" data-expense-id="${escapeHtml(item.expense_id)}">Delete</button>
+          </div>
+        </td>
       </tr>
     `,
   );
@@ -385,14 +515,20 @@ function renderBudgetRecords(items) {
     budgetsBody,
     items,
     "No budgets loaded yet.",
-    5,
+    6,
     (item) => `
       <tr>
         <td>${item.budget_id}</td>
-        <td>${escapeHtml(item.category_id ?? "-")}</td>
+        <td>${escapeHtml(categoryName(item.category_id))}</td>
         <td>${money(item.amount_limit)}</td>
         <td>${escapeHtml(item.period)}</td>
         <td>${escapeHtml(item.start_date)}</td>
+        <td>
+          <div class="row-actions">
+            <button class="admin-btn" type="button" data-record-action="edit-budget" data-budget-id="${escapeHtml(item.budget_id)}">Edit</button>
+            <button class="admin-btn admin-btn-danger" type="button" data-record-action="delete-budget" data-budget-id="${escapeHtml(item.budget_id)}">Delete</button>
+          </div>
+        </td>
       </tr>
     `,
   );
@@ -555,15 +691,31 @@ function renderCategoryRecords(items) {
     categoriesBody,
     items,
     "No categories loaded yet.",
-    4,
-    (item) => `
-      <tr>
-        <td>${item.category_id}</td>
-        <td>${escapeHtml(item.name)}</td>
-        <td>${escapeHtml(item.description || "-")}</td>
-        <td><span class="pill ${item.is_default ? "success" : ""}">${item.is_default ? "Yes" : "No"}</span></td>
-      </tr>
-    `,
+    5,
+    (item) => {
+      const canManage = Boolean(
+        state.session?.user_id
+        && !item.is_default
+        && Number(item.created_by) === Number(state.session.user_id),
+      );
+
+      return `
+        <tr>
+          <td>${item.category_id}</td>
+          <td>${escapeHtml(item.name)}</td>
+          <td>${escapeHtml(item.description || "-")}</td>
+          <td><span class="pill ${item.is_default ? "success" : ""}">${item.is_default ? "Yes" : "No"}</span></td>
+          <td>
+            ${canManage ? `
+              <div class="row-actions">
+                <button class="admin-btn" type="button" data-record-action="edit-category" data-category-id="${escapeHtml(item.category_id)}">Edit</button>
+                <button class="admin-btn admin-btn-danger" type="button" data-record-action="delete-category" data-category-id="${escapeHtml(item.category_id)}">Delete</button>
+              </div>
+            ` : '<span class="muted-cell">System</span>'}
+          </td>
+        </tr>
+      `;
+    },
   );
 }
 
@@ -657,12 +809,14 @@ async function loadCategoriesList() {
   try {
     const url = state.session?.user_id ? `/categories?user_id=${state.session.user_id}` : "/categories";
     const items = await request(url);
+    state.categories = items || [];
     populateCategorySelects(items || []);
     renderCategoryRecords(items || []);
     setCategoryMessage(`${(items || []).length} category${(items || []).length === 1 ? "" : "s"} loaded.`);
     return items || [];
   } catch (error) {
     populateCategorySelects([]);
+    state.categories = [];
     renderCategoryRecords([]);
     setCategoryMessage(error.message, true);
     return [];
@@ -671,6 +825,7 @@ async function loadCategoriesList() {
 
 async function loadExpensesList() {
   if (!state.session?.user_id) {
+    state.expenses = [];
     renderExpensesRows([]);
     setExpenseMessage("Log in to load expenses.", true);
     return [];
@@ -678,10 +833,12 @@ async function loadExpensesList() {
 
   try {
     const items = await request(`/expenses/${state.session.user_id}`);
+    state.expenses = items || [];
     renderExpensesRows(items || []);
     setExpenseMessage(`${(items || []).length} expense${(items || []).length === 1 ? "" : "s"} loaded.`);
     return items || [];
   } catch (error) {
+    state.expenses = [];
     setExpenseMessage(error.message, true);
     return [];
   }
@@ -689,6 +846,7 @@ async function loadExpensesList() {
 
 async function loadBudgetRecords() {
   if (!state.session?.user_id) {
+    state.budgets = [];
     renderBudgetRecords([]);
     setBudgetMessage("Log in to load budgets.", true);
     return [];
@@ -696,10 +854,12 @@ async function loadBudgetRecords() {
 
   try {
     const items = await request(`/budgets/${state.session.user_id}`);
+    state.budgets = items || [];
     renderBudgetRecords(items || []);
     setBudgetMessage(`${(items || []).length} budget${(items || []).length === 1 ? "" : "s"} loaded.`);
     return items || [];
   } catch (error) {
+    state.budgets = [];
     setBudgetMessage(error.message, true);
     return [];
   }
@@ -889,6 +1049,115 @@ loadBudgetsButton.addEventListener("click", loadBudgetRecords);
 loadReportsButton.addEventListener("click", loadReportRecords);
 workspaceNavButtons.forEach((button) => {
   button.addEventListener("click", () => openWorkspaceTarget(button.dataset.workspaceTarget));
+});
+
+expensesBody.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-record-action]");
+  if (!button) return;
+
+  const item = state.expenses.find((expense) => Number(expense.expense_id) === Number(button.dataset.expenseId));
+  if (!item) {
+    setExpenseMessage("Load expenses again before editing this record.", true);
+    return;
+  }
+
+  openRecordModal({
+    type: "expense",
+    mode: button.dataset.recordAction.startsWith("delete") ? "delete" : "edit",
+    item,
+  });
+});
+
+budgetsBody.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-record-action]");
+  if (!button) return;
+
+  const item = state.budgets.find((budget) => Number(budget.budget_id) === Number(button.dataset.budgetId));
+  if (!item) {
+    setBudgetMessage("Load budgets again before editing this record.", true);
+    return;
+  }
+
+  openRecordModal({
+    type: "budget",
+    mode: button.dataset.recordAction.startsWith("delete") ? "delete" : "edit",
+    item,
+  });
+});
+
+categoriesBody.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-record-action]");
+  if (!button) return;
+
+  const item = state.categories.find((category) => Number(category.category_id) === Number(button.dataset.categoryId));
+  if (!item) {
+    setCategoryMessage("Load categories again before editing this record.", true);
+    return;
+  }
+
+  if (item.is_default || Number(item.created_by) !== Number(state.session?.user_id)) {
+    setCategoryMessage("System categories are read-only here.", true);
+    return;
+  }
+
+  openRecordModal({
+    type: "category",
+    mode: button.dataset.recordAction.startsWith("delete") ? "delete" : "edit",
+    item,
+  });
+});
+
+recordModalClose.addEventListener("click", closeRecordModal);
+recordModal.addEventListener("click", (event) => {
+  if (event.target === recordModal || event.target.closest("[data-modal-close]")) {
+    closeRecordModal();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !recordModal.classList.contains("hidden")) {
+    closeRecordModal();
+  }
+});
+
+recordModalForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  if (!state.session?.user_id || !state.activeModal) {
+    setModalMessage("Log in first.", true);
+    return;
+  }
+
+  const { type, mode, item } = state.activeModal;
+  const id = type === "expense" ? item.expense_id : type === "budget" ? item.budget_id : item.category_id;
+  const path = type === "expense" ? `/update-expense/${id}` : type === "budget" ? `/update-budget/${id}` : `/update-category/${id}`;
+  const deletePath = type === "expense" ? `/delete-expense/${id}` : type === "budget" ? `/delete-budget/${id}` : `/delete-category/${id}`;
+
+  try {
+    if (mode === "delete") {
+      await request(deletePath, {
+        method: "DELETE",
+        body: JSON.stringify({ user_id: state.session.user_id }),
+      });
+    } else {
+      await request(path, {
+        method: "PUT",
+        body: JSON.stringify(buildFormPayload(recordModalForm, { user_id: state.session.user_id })),
+      });
+    }
+
+    closeRecordModal();
+    await loadDashboard();
+    if (type === "expense") {
+      setExpenseMessage(`Expense ${mode === "delete" ? "deleted" : "updated"}.`);
+    } else if (type === "budget") {
+      setBudgetMessage(`Budget ${mode === "delete" ? "deleted" : "updated"}.`);
+    } else {
+      setCategoryMessage(`Category ${mode === "delete" ? "deleted" : "updated"}.`);
+    }
+  } catch (error) {
+    setModalMessage(error.message, true);
+  }
 });
 
 expenseForm.addEventListener("submit", async (event) => {

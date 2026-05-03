@@ -87,9 +87,12 @@ def get_expense(expense_id):
 @expense_routes.route("/delete-expense/<expense_id>", methods=["DELETE"])
 def delete_expense(expense_id):
     data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
 
     if not is_positive_int(expense_id):
         return jsonify({"message": "expense_id must be a positive integer"}), 400
+    if not is_positive_int(user_id):
+        return jsonify({"message": "user_id must be a positive integer"}), 400
 
     existing = supabase.table("expenses") \
         .select("*") \
@@ -100,14 +103,16 @@ def delete_expense(expense_id):
     if not existing.data:
         return jsonify({"message": "Expense not found"}), 404
 
+    deleted = existing.data[0]
+    if int(deleted.get("user_id")) != int(user_id):
+        return jsonify({"message": "You can only delete your own expenses"}), 403
+
     response = supabase.table("expenses") \
         .delete() \
         .eq("expense_id", expense_id) \
         .execute()
 
-    deleted = existing.data[0]
-    audit_user_id = data.get("user_id", deleted.get("user_id"))
-    log_audit_action(audit_user_id, "DELETE", "expenses", expense_id)
+    log_audit_action(user_id, "DELETE", "expenses", expense_id)
 
     return jsonify({
         "message": "Expense deleted",
@@ -118,9 +123,24 @@ def delete_expense(expense_id):
 @expense_routes.route("/update-expense/<expense_id>", methods=["PUT"])
 def update_expense(expense_id):
     data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
 
     if not is_positive_int(expense_id):
         return jsonify({"message": "expense_id must be a positive integer"}), 400
+    if not is_positive_int(user_id):
+        return jsonify({"message": "user_id must be a positive integer"}), 400
+
+    existing = supabase.table("expenses") \
+        .select("*") \
+        .eq("expense_id", expense_id) \
+        .limit(1) \
+        .execute()
+
+    if not existing.data:
+        return jsonify({"message": "Expense not found"}), 404
+
+    if int(existing.data[0].get("user_id")) != int(user_id):
+        return jsonify({"message": "You can only update your own expenses"}), 403
 
     updates = {}
     for key in ("amount", "category_id", "notes", "expense_date"):
@@ -149,8 +169,7 @@ def update_expense(expense_id):
         .execute()
 
     updated = response.data[0] if response.data else {}
-    audit_user_id = data.get("user_id", updated.get("user_id"))
-    log_audit_action(audit_user_id, "UPDATE", "expenses", expense_id)
+    log_audit_action(user_id, "UPDATE", "expenses", expense_id)
 
     return jsonify({
         "message": "Expense updated",

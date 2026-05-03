@@ -46,6 +46,7 @@
           <button class="workspace-nav-button" type="button" data-admin-target="usersCard">Users</button>
           <button class="workspace-nav-button" type="button" data-admin-target="categoriesCard">Categories</button>
           <button class="workspace-nav-button" type="button" data-admin-target="expensesCard">Expenses</button>
+          <button class="workspace-nav-button" type="button" data-admin-target="budgetsCard">Budgets</button>
           <button class="workspace-nav-button" type="button" data-admin-target="reportsCard">Reports</button>
           <button class="workspace-nav-button" type="button" data-admin-target="auditLogsCard">Activity</button>
         </div>
@@ -301,8 +302,30 @@
     </main>
   </div>
 
+  <div id="adminModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="adminModalTitle">
+    <div class="modal-panel glass-surface" role="document">
+      <div class="modal-head">
+        <div>
+          <p id="adminModalEyebrow" class="eyebrow">Edit</p>
+          <h2 id="adminModalTitle">Update record</h2>
+        </div>
+        <button id="adminModalClose" class="modal-close-button" type="button" aria-label="Close modal">&times;</button>
+      </div>
+      <form id="adminModalForm" class="modal-form mini-form"></form>
+      <p id="adminModalMessage" class="status-text"></p>
+    </div>
+  </div>
+
   <script>
     let currentAdminUserId = null;
+    const adminState = {
+      users: [],
+      categories: [],
+      expenses: [],
+      budgets: [],
+      reports: [],
+      activeModal: null
+    };
 
     const baseUrl = () => localStorage.getItem('financer_base_url') || 'http://127.0.0.1:5000';
     const getSession = () => JSON.parse(localStorage.getItem('financer_session') || '{}');
@@ -325,6 +348,104 @@
       document.getElementById(tbodyId).innerHTML = `<tr><td colspan="${colspan}" class="empty-cell">${message}</td></tr>`;
     }
 
+    function setAdminModalMessage(text, isError = false) {
+      const target = document.getElementById('adminModalMessage');
+      target.textContent = text || '';
+      target.className = isError ? 'status-text error' : 'status-text';
+    }
+
+    async function adminRequest(path, options = {}) {
+      const response = await fetch(`${baseUrl()}${path}`, {
+        ...options,
+        headers: {
+          Accept: 'application/json',
+          ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+          ...(options.headers || {})
+        }
+      });
+      const text = await response.text();
+      let payload = {};
+      try {
+        payload = text ? JSON.parse(text) : {};
+      } catch {
+        payload = { message: text || 'Unexpected response' };
+      }
+      if (!response.ok) {
+        throw new Error(payload.message || payload.error || 'Request failed');
+      }
+      return payload;
+    }
+
+    function closeAdminModal() {
+      adminState.activeModal = null;
+      document.getElementById('adminModal').classList.add('hidden');
+      document.getElementById('adminModalForm').innerHTML = '';
+      setAdminModalMessage('');
+    }
+
+    function categoryOptions(selectedId) {
+      return `
+        <option value="">Choose a category</option>
+        ${adminState.categories.map(category => `
+          <option value="${escapeHtml(category.category_id)}" ${Number(category.category_id) === Number(selectedId) ? 'selected' : ''}>${escapeHtml(category.name)}</option>
+        `).join('')}
+      `;
+    }
+
+    function openAdminModal(config) {
+      adminState.activeModal = config;
+      const modal = document.getElementById('adminModal');
+      const form = document.getElementById('adminModalForm');
+      document.getElementById('adminModalEyebrow').textContent = config.mode === 'delete' ? 'Delete' : 'Edit';
+      document.getElementById('adminModalTitle').textContent = config.title;
+      setAdminModalMessage('');
+
+      if (config.mode === 'delete') {
+        form.innerHTML = `
+          <p class="subtext">${config.message}</p>
+          <div class="modal-actions">
+            <button class="ghost-button" type="button" data-modal-close>Cancel</button>
+            <button class="danger-button" type="submit">Delete</button>
+          </div>
+        `;
+      } else {
+        form.innerHTML = config.fields + `
+          <div class="modal-actions">
+            <button class="ghost-button" type="button" data-modal-close>Cancel</button>
+            <button class="primary-button" type="submit">Save</button>
+          </div>
+        `;
+      }
+
+      modal.classList.remove('hidden');
+      form.querySelector('input, select, textarea, button')?.focus();
+    }
+
+    function buildAdminModalPayload(form) {
+      const payload = { admin_user_id: currentAdminUserId };
+      const formData = new FormData(form);
+      for (const [key, value] of formData.entries()) {
+        if (value === '') continue;
+        if (key === 'is_default') {
+          payload.is_default = form.elements.is_default?.checked || false;
+          continue;
+        }
+        if (['user_id', 'category_id'].includes(key)) {
+          payload[key] = Number(value);
+          continue;
+        }
+        if (['amount', 'amount_limit'].includes(key)) {
+          payload[key] = Number(value);
+          continue;
+        }
+        payload[key] = value;
+      }
+      if (form.elements.is_default && !payload.hasOwnProperty('is_default')) {
+        payload.is_default = false;
+      }
+      return payload;
+    }
+
     function formatDateTime(value) {
       if (!value) return '-';
       const date = new Date(value);
@@ -345,7 +466,7 @@
     async function syncRoleFromBackend() {
       const session = getSession();
       if (!session.user_id) {
-        alert('Session expired. Please login again.');
+        document.getElementById('adminSubtext').textContent = 'Session expired. Please login again.';
         window.location.href = 'index.html';
         return;
       }
@@ -401,6 +522,7 @@
       try {
         const response = await fetch(`${baseUrl()}/admin/users?admin_user_id=${currentAdminUserId}`);
         const users = await response.json();
+        adminState.users = Array.isArray(users) ? users : [];
         const tbody = document.getElementById('usersBody');
         setCount('userCount', users);
 
@@ -431,6 +553,7 @@
       try {
         const response = await fetch(`${baseUrl()}/admin/categories?admin_user_id=${currentAdminUserId}`);
         const categories = await response.json();
+        adminState.categories = Array.isArray(categories) ? categories : [];
         const tbody = document.getElementById('categoriesBody');
         setCount('categoryCount', categories);
 
@@ -460,7 +583,7 @@
       event.preventDefault();
       const name = document.getElementById('newCategoryName').value.trim();
       if (!name) {
-        alert('Enter a category name');
+        document.getElementById('adminSubtext').textContent = 'Enter a category name.';
         return;
       }
 
@@ -478,104 +601,89 @@
           loadCategories();
           loadAuditLogs();
         } else {
-          alert('Error: ' + (result.message || 'Failed to add category'));
+          document.getElementById('adminSubtext').textContent = result.message || 'Failed to add category';
         }
       } catch (error) {
         console.error(error);
-        alert('Failed to add category');
+        document.getElementById('adminSubtext').textContent = 'Failed to add category.';
       }
     }
 
     async function deleteCategory(categoryId, name) {
-      if (!confirm(`Delete category "${name}"?`)) return;
-      try {
-        const response = await fetch(`${baseUrl()}/admin/categories/${categoryId}`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ admin_user_id: currentAdminUserId })
-        });
-        const result = await response.json();
-        if (response.ok) {
-          loadCategories();
-          loadAuditLogs();
-        } else {
-          alert('Error: ' + (result.message || 'Failed to delete category'));
-        }
-      } catch (error) {
-        console.error(error);
-        alert('Failed to delete category');
-      }
+      openAdminModal({
+        type: 'category',
+        mode: 'delete',
+        id: categoryId,
+        title: 'Delete category',
+        message: `Delete category "${escapeHtml(name)}"?`
+      });
     }
 
     async function editCategory(categoryId, name) {
-      const newName = prompt('New category name:', name);
-      if (newName === null) return;
-      const makeDefault = confirm('Mark as default/global? OK = yes.');
-
-      try {
-        const response = await fetch(`${baseUrl()}/admin/categories/${categoryId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ admin_user_id: currentAdminUserId, name: newName, is_default: makeDefault })
-        });
-        const result = await response.json();
-        if (response.ok) {
-          loadCategories();
-          loadAuditLogs();
-        } else {
-          alert('Error: ' + (result.message || 'Failed to update category'));
-        }
-      } catch (error) {
-        console.error(error);
-        alert('Failed to update category');
-      }
+      const category = adminState.categories.find(item => Number(item.category_id) === Number(categoryId)) || {};
+      openAdminModal({
+        type: 'category',
+        mode: 'edit',
+        id: categoryId,
+        title: 'Edit category',
+        fields: `
+          <label>
+            Name
+            <input name="name" type="text" value="${escapeHtml(name)}" required />
+          </label>
+          <label>
+            Description
+            <input name="description" type="text" value="${escapeHtml(category.description || '')}" />
+          </label>
+          <label class="checkbox-row">
+            <input name="is_default" type="checkbox" ${category.is_default ? 'checked' : ''} />
+            Default category
+          </label>
+        `
+      });
     }
 
     function openRoleModal(userId, username, currentRole) {
-      const newRole = prompt(`Set new role for ${username} (basic/premium/admin):`, currentRole);
-      if (!newRole) return;
-      updateUserRole(userId, newRole);
+      openAdminModal({
+        type: 'user-role',
+        mode: 'edit',
+        id: userId,
+        title: `Edit ${username}`,
+        fields: `
+          <label>
+            Role
+            <select name="role" required>
+              <option value="basic" ${currentRole === 'basic' ? 'selected' : ''}>basic</option>
+              <option value="premium" ${currentRole === 'premium' ? 'selected' : ''}>premium</option>
+              <option value="admin" ${currentRole === 'admin' ? 'selected' : ''}>admin</option>
+            </select>
+          </label>
+        `
+      });
     }
 
     async function updateUserRole(userId, newRole) {
       try {
-        const response = await fetch(`${baseUrl()}/admin/users/${userId}/role`, {
+        await adminRequest(`/admin/users/${userId}/role`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ admin_user_id: currentAdminUserId, role: newRole })
         });
-        const result = await response.json();
-        if (response.ok) {
-          loadUsers();
-          loadAuditLogs();
-        } else {
-          alert('Error: ' + (result.message || 'Failed to update role'));
-        }
+        loadUsers();
+        loadAuditLogs();
       } catch (error) {
         console.error(error);
-        alert('Failed to update role');
+        document.getElementById('adminSubtext').textContent = error.message || 'Failed to update role';
       }
     }
 
     async function deleteUser(userId, username) {
-      if (!confirm(`Delete user ${username}?`)) return;
-      try {
-        const response = await fetch(`${baseUrl()}/admin/users/${userId}`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ admin_user_id: currentAdminUserId })
-        });
-        const result = await response.json();
-        if (response.ok) {
-          loadUsers();
-          loadAuditLogs();
-        } else {
-          alert('Error: ' + (result.message || 'Failed to delete user'));
-        }
-      } catch (error) {
-        console.error(error);
-        alert('Failed to delete user');
-      }
+      openAdminModal({
+        type: 'user',
+        mode: 'delete',
+        id: userId,
+        title: 'Delete user',
+        message: `Delete user ${escapeHtml(username)}?`
+      });
     }
 
     async function loadExpenses() {
@@ -583,6 +691,7 @@
       try {
         const response = await fetch(`${baseUrl()}/admin/expenses?admin_user_id=${currentAdminUserId}`);
         const expenses = await response.json();
+        adminState.expenses = Array.isArray(expenses) ? expenses : [];
         const tbody = document.getElementById('expensesBody');
         setCount('expenseCount', expenses);
 
@@ -595,7 +704,10 @@
               <td>${escapeHtml(expense.category_id)}</td>
               <td>${escapeHtml(expense.amount)}</td>
               <td>${escapeHtml(expense.notes || '-')}</td>
-              <td class="admin-table-actions"><button class="admin-btn admin-btn-danger" type="button" data-admin-action="delete-expense" data-expense-id="${escapeHtml(expense.expense_id)}">Delete</button></td>
+              <td class="admin-table-actions">
+                <button class="admin-btn" type="button" data-admin-action="edit-expense" data-expense-id="${escapeHtml(expense.expense_id)}">Edit</button>
+                <button class="admin-btn admin-btn-danger" type="button" data-admin-action="delete-expense" data-expense-id="${escapeHtml(expense.expense_id)}">Delete</button>
+              </td>
             </tr>
           `).join('');
         } else {
@@ -608,23 +720,46 @@
     }
 
     async function adminDeleteExpense(expenseId) {
-      if (!confirm('Delete expense #' + expenseId + '?')) return;
-      try {
-        const response = await fetch(`${baseUrl()}/admin/expenses/${expenseId}`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ admin_user_id: currentAdminUserId })
-        });
-        const result = await response.json();
-        if (response.ok) {
-          loadExpenses();
-          loadAuditLogs();
-        } else {
-          alert('Error: ' + (result.message || 'Failed to delete expense'));
-        }
-      } catch (error) {
-        console.error(error);
-      }
+      openAdminModal({
+        type: 'expense',
+        mode: 'delete',
+        id: expenseId,
+        title: 'Delete expense',
+        message: `Delete expense #${escapeHtml(expenseId)}?`
+      });
+    }
+
+    function adminEditExpense(expenseId) {
+      const expense = adminState.expenses.find(item => Number(item.expense_id) === Number(expenseId));
+      if (!expense) return;
+      openAdminModal({
+        type: 'expense',
+        mode: 'edit',
+        id: expenseId,
+        title: 'Edit expense',
+        fields: `
+          <label>
+            Owner user ID
+            <input name="user_id" type="number" min="1" value="${escapeHtml(expense.user_id)}" required />
+          </label>
+          <label>
+            Category
+            <select name="category_id" required>${categoryOptions(expense.category_id)}</select>
+          </label>
+          <label>
+            Amount
+            <input name="amount" type="number" min="0.01" step="0.01" value="${escapeHtml(expense.amount)}" required />
+          </label>
+          <label>
+            Date
+            <input name="expense_date" type="date" value="${escapeHtml(expense.expense_date)}" required />
+          </label>
+          <label>
+            Notes
+            <textarea name="notes" rows="3">${escapeHtml(expense.notes || '')}</textarea>
+          </label>
+        `
+      });
     }
 
     async function loadBudgets() {
@@ -632,6 +767,7 @@
       try {
         const response = await fetch(`${baseUrl()}/admin/budgets?admin_user_id=${currentAdminUserId}`);
         const budgets = await response.json();
+        adminState.budgets = Array.isArray(budgets) ? budgets : [];
         const tbody = document.getElementById('budgetsBody');
         setCount('budgetCount', budgets);
 
@@ -644,7 +780,10 @@
               <td>${escapeHtml(budget.amount_limit)}</td>
               <td>${escapeHtml(budget.period)}</td>
               <td>${escapeHtml(budget.start_date)}</td>
-              <td class="admin-table-actions"><button class="admin-btn admin-btn-danger" type="button" data-admin-action="delete-budget" data-budget-id="${escapeHtml(budget.budget_id)}">Delete</button></td>
+              <td class="admin-table-actions">
+                <button class="admin-btn" type="button" data-admin-action="edit-budget" data-budget-id="${escapeHtml(budget.budget_id)}">Edit</button>
+                <button class="admin-btn admin-btn-danger" type="button" data-admin-action="delete-budget" data-budget-id="${escapeHtml(budget.budget_id)}">Delete</button>
+              </td>
             </tr>
           `).join('');
         } else {
@@ -657,23 +796,49 @@
     }
 
     async function adminDeleteBudget(budgetId) {
-      if (!confirm('Delete budget #' + budgetId + '?')) return;
-      try {
-        const response = await fetch(`${baseUrl()}/admin/budgets/${budgetId}`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ admin_user_id: currentAdminUserId })
-        });
-        const result = await response.json();
-        if (response.ok) {
-          loadBudgets();
-          loadAuditLogs();
-        } else {
-          alert('Error: ' + (result.message || 'Failed to delete budget'));
-        }
-      } catch (error) {
-        console.error(error);
-      }
+      openAdminModal({
+        type: 'budget',
+        mode: 'delete',
+        id: budgetId,
+        title: 'Delete budget',
+        message: `Delete budget #${escapeHtml(budgetId)}?`
+      });
+    }
+
+    function adminEditBudget(budgetId) {
+      const budget = adminState.budgets.find(item => Number(item.budget_id) === Number(budgetId));
+      if (!budget) return;
+      openAdminModal({
+        type: 'budget',
+        mode: 'edit',
+        id: budgetId,
+        title: 'Edit budget',
+        fields: `
+          <label>
+            Owner user ID
+            <input name="user_id" type="number" min="1" value="${escapeHtml(budget.user_id)}" required />
+          </label>
+          <label>
+            Category
+            <select name="category_id" required>${categoryOptions(budget.category_id)}</select>
+          </label>
+          <label>
+            Limit
+            <input name="amount_limit" type="number" min="0.01" step="0.01" value="${escapeHtml(budget.amount_limit)}" required />
+          </label>
+          <label>
+            Period
+            <select name="period" required>
+              <option value="weekly" ${budget.period === 'weekly' ? 'selected' : ''}>weekly</option>
+              <option value="monthly" ${budget.period === 'monthly' ? 'selected' : ''}>monthly</option>
+            </select>
+          </label>
+          <label>
+            Start date
+            <input name="start_date" type="date" value="${escapeHtml(budget.start_date)}" required />
+          </label>
+        `
+      });
     }
 
     async function loadReports() {
@@ -681,6 +846,7 @@
       try {
         const response = await fetch(`${baseUrl()}/admin/reports?admin_user_id=${currentAdminUserId}`);
         const reports = await response.json();
+        adminState.reports = Array.isArray(reports) ? reports : [];
         const tbody = document.getElementById('reportsBody');
 
         if (Array.isArray(reports) && reports.length) {
@@ -750,29 +916,67 @@
     }
 
     async function adminDeleteReport(reportId) {
-      if (!confirm('Delete report #' + reportId + '?')) return;
-      try {
-        const response = await fetch(`${baseUrl()}/admin/reports/${reportId}`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ admin_user_id: currentAdminUserId })
-        });
-        const result = await response.json();
-        if (response.ok) {
-          loadReports();
-          loadAuditLogs();
-        } else {
-          alert('Error: ' + (result.message || 'Failed to delete report'));
-        }
-      } catch (error) {
-        console.error(error);
-      }
+      openAdminModal({
+        type: 'report',
+        mode: 'delete',
+        id: reportId,
+        title: 'Delete report',
+        message: `Delete report #${escapeHtml(reportId)}?`
+      });
     }
 
     function logout() {
-      if (confirm('Logout?')) {
-        localStorage.removeItem('financer_session');
-        window.location.href = 'index.html';
+      openAdminModal({
+        type: 'logout',
+        mode: 'delete',
+        id: null,
+        title: 'Logout',
+        message: 'End this admin session and return to the dashboard?'
+      });
+    }
+
+    async function submitAdminModal(event) {
+      event.preventDefault();
+      const config = adminState.activeModal;
+      if (!config) return;
+
+      try {
+        if (config.type === 'logout') {
+          localStorage.removeItem('financer_session');
+          window.location.href = 'index.html';
+          return;
+        }
+
+        const pathByType = {
+          'user-role': `/admin/users/${config.id}/role`,
+          user: `/admin/users/${config.id}`,
+          category: `/admin/categories/${config.id}`,
+          expense: `/admin/expenses/${config.id}`,
+          budget: `/admin/budgets/${config.id}`,
+          report: `/admin/reports/${config.id}`
+        };
+        const method = config.mode === 'delete' ? 'DELETE' : 'PUT';
+        const payload = config.mode === 'delete'
+          ? { admin_user_id: currentAdminUserId }
+          : buildAdminModalPayload(event.currentTarget);
+
+        await adminRequest(pathByType[config.type], {
+          method,
+          body: JSON.stringify(payload)
+        });
+
+        closeAdminModal();
+        await Promise.all([
+          config.type === 'user-role' || config.type === 'user' ? loadUsers() : Promise.resolve(),
+          config.type === 'category' ? loadCategories() : Promise.resolve(),
+          config.type === 'expense' ? loadExpenses() : Promise.resolve(),
+          config.type === 'budget' ? loadBudgets() : Promise.resolve(),
+          config.type === 'report' ? loadReports() : Promise.resolve(),
+          loadAuditLogs()
+        ]);
+        document.getElementById('adminSubtext').textContent = `${config.title} completed.`;
+      } catch (error) {
+        setAdminModalMessage(error.message, true);
       }
     }
 
@@ -787,6 +991,18 @@
       document.getElementById('loadBudgetsBtn').addEventListener('click', loadBudgets);
       document.getElementById('loadReportsBtn').addEventListener('click', loadReports);
       document.getElementById('loadAuditLogsBtn').addEventListener('click', loadAuditLogs);
+      document.getElementById('adminModalClose').addEventListener('click', closeAdminModal);
+      document.getElementById('adminModal').addEventListener('click', event => {
+        if (event.target === document.getElementById('adminModal') || event.target.closest('[data-modal-close]')) {
+          closeAdminModal();
+        }
+      });
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && !document.getElementById('adminModal').classList.contains('hidden')) {
+          closeAdminModal();
+        }
+      });
+      document.getElementById('adminModalForm').addEventListener('submit', submitAdminModal);
 
       document.querySelectorAll('[data-admin-target]').forEach(button => {
         button.addEventListener('click', () => {
@@ -814,8 +1030,14 @@
         if (button.dataset.adminAction === 'delete-expense') {
           adminDeleteExpense(Number(button.dataset.expenseId));
         }
+        if (button.dataset.adminAction === 'edit-expense') {
+          adminEditExpense(Number(button.dataset.expenseId));
+        }
         if (button.dataset.adminAction === 'delete-budget') {
           adminDeleteBudget(Number(button.dataset.budgetId));
+        }
+        if (button.dataset.adminAction === 'edit-budget') {
+          adminEditBudget(Number(button.dataset.budgetId));
         }
         if (button.dataset.adminAction === 'delete-report') {
           adminDeleteReport(Number(button.dataset.reportId));

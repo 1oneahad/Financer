@@ -352,11 +352,12 @@
                     <th>Category</th>
                     <th>Amount</th>
                     <th>Notes</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="expensesBody">
                   <tr>
-                    <td colspan="5" class="empty-cell">No expenses loaded yet.</td>
+                    <td colspan="6" class="empty-cell">No expenses loaded yet.</td>
                   </tr>
                 </tbody>
               </table>
@@ -407,11 +408,12 @@
                     <th>Limit</th>
                     <th>Period</th>
                     <th>Start</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="budgetsBody">
                   <tr>
-                    <td colspan="5" class="empty-cell">No budgets loaded yet.</td>
+                    <td colspan="6" class="empty-cell">No budgets loaded yet.</td>
                   </tr>
                 </tbody>
               </table>
@@ -504,11 +506,12 @@
                     <th>Name</th>
                     <th>Description</th>
                     <th>Default</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="categoriesBody">
                   <tr>
-                    <td colspan="4" class="empty-cell">No categories loaded yet.</td>
+                    <td colspan="5" class="empty-cell">No categories loaded yet.</td>
                   </tr>
                 </tbody>
               </table>
@@ -517,6 +520,20 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <div id="recordModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="recordModalTitle">
+    <div class="modal-panel glass-surface" role="document">
+      <div class="modal-head">
+        <div>
+          <p id="recordModalEyebrow" class="eyebrow">Edit</p>
+          <h2 id="recordModalTitle">Update record</h2>
+        </div>
+        <button id="recordModalClose" class="modal-close-button" type="button" aria-label="Close modal">&times;</button>
+      </div>
+      <form id="recordModalForm" class="modal-form mini-form"></form>
+      <p id="recordModalMessage" class="status-text"></p>
+    </div>
   </div>
 
   <script src="app.js"></script>
